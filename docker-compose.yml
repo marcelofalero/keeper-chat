@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080" # Expose server port to host
+    environment:
+      - KEEPER_PORT=8080 # Port inside the container
+      - KEEPER_DB_PATH=/data/keeper.db
+    volumes:
+      - keeper_data:/data # Named volume for SQLite database persistence
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./test-ui
+      dockerfile: Dockerfile
+    ports:
+      - "8081:80" # Expose Nginx port (serving Flutter web app) to host port 8081
+    depends_on:
+      - server # Optional: UI might start before server is fully ready, but this expresses a dependency
+    restart: unless-stopped
+
+volumes:
+  keeper_data: # Defines the named volume for data persistence
