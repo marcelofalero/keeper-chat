@@ -204,6 +204,32 @@ func wsHandler(w http.ResponseWriter, r *http.Request, messageRepo ports.Message
 	}
 }
 
+// --- CORS Middleware ---
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers
+		// Allow requests from our Flutter UI development server
+		// For production, you might want to make this configurable.
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:8081") 
+
+		// Allow credentials - useful if you were using cookies or session-based auth
+		// For token-based auth in headers, this isn't strictly necessary but doesn't hurt.
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		// Handle preflight OPTIONS requests
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept") // Added Accept
+			w.Header().Set("Access-Control-Max-Age", "86400") // Cache preflight response for 1 day
+			w.WriteHeader(http.StatusNoContent) // 204 No Content is standard for preflight success
+			return
+		}
+
+		// Call the next handler in the chain for actual requests
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
@@ -237,12 +263,12 @@ func main() {
 	}
 	authSvc := services.NewAuthService(userRepo, jwtSecret)
 
-	// Setup HTTP handlers
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		wsHandler(w, r, messageRepo, authSvc) // Pass authSvc, though wsHandler doesn't use it yet
-	})
-	http.HandleFunc("/api/register", registerHandler(authSvc))
-	http.HandleFunc("/api/login", loginHandler(authSvc))
+	// Setup HTTP handlers with CORS middleware
+	http.Handle("/api/register", corsMiddleware(registerHandler(authSvc)))
+	http.Handle("/api/login", corsMiddleware(loginHandler(authSvc)))
+	http.Handle("/ws", corsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wsHandler(w, r, messageRepo, authSvc)
+	})))
 
 	port := os.Getenv("PORT")
 	if port == "" {
