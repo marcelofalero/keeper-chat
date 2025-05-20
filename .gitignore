@@ -23,3 +23,20 @@ go.work.sum
 
 # env file
 .env
+
+# Go build output
+server/keeper
+
+# Flutter build output
+test-ui/build/
+test-ui/.dart_tool/
+test-ui/.flutter-plugins
+test-ui/.flutter-plugins-dependencies
+
+# IDE specific files (common ones)
+.idea/
+*.iml
+.vscode/
+
+# Local data (SQLite DB via bind mount)
+./data/
