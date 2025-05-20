@@ -37,3 +37,6 @@ test-ui/.flutter-plugins-dependencies
 .idea/
 *.iml
 .vscode/
+
+# Local data (SQLite DB via bind mount)
+./data/

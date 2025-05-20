@@ -11,7 +11,7 @@ services:
       - KEEPER_PORT=8080 # Port inside the container
       - KEEPER_DB_PATH=/data/keeper.db
     volumes:
-      - keeper_data:/data # Named volume for SQLite database persistence
+      - ./data:/data # Bind mount for SQLite database persistence
     restart: unless-stopped
 
   ui:
@@ -23,6 +23,3 @@ services:
     depends_on:
       - server # Optional: UI might start before server is fully ready, but this expresses a dependency
     restart: unless-stopped
-
-volumes:
-  keeper_data: # Defines the named volume for data persistence

@@ -41,3 +41,15 @@ The Go server uses an SQLite database. The database file (`keeper.db`) is stored
 
 -   The Flutter UI container serves a web build (`flutter build web`).
 -   For active Flutter development, features like hot reload are best experienced by running the Flutter app directly on your host machine (e.g., `cd test-ui && flutter run`) and connecting to the Go server running in Docker (accessible at `http://localhost:8080`). The Docker setup is more for a stable, containerized version of the UI.
+
+## Database Seeding
+
+To populate the database with initial test data (sample users and messages), you can run the seed script.
+Ensure the server is not running when you run the seed script to avoid potential database lock issues, or ensure the script handles it.
+
+1.  Make sure the `./data/` directory exists at the project root (Docker Compose bind mount should create it on first run if mapped to a new local dir, but `go run` might not). The script attempts to create it.
+2.  From the project root directory, run:
+    ```bash
+    go run server/cmd/seed/main.go
+    ```
+This will create/populate the `./data/keeper.db` file.
