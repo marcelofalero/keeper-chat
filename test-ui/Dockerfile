@@ -1,5 +1,5 @@
 # Stage 1: Build the Flutter web application
-FROM ghcr.io/cirrusci/flutter:latest AS builder
+FROM ghcr.io/cirruslabs/flutter:latest AS builder
 # Using ghcr.io/fluttercommunity/flutter:stable which is a community maintained image with Flutter SDK.
 # Alternative: cirrusci/flutter:stable, but check for latest stable tags.
 
