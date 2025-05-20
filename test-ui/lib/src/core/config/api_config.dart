@@ -8,9 +8,9 @@ const String defaultBaseUrl = "localhost:8080";
 // This simple string approach is for basic test UI purposes.
 const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: defaultBaseUrl);
 
-const String registerUrl = "http://\$baseUrl/api/register";
-const String loginUrl = "http://\$baseUrl/api/login";
-const String webSocketBaseUrl = "ws://\$baseUrl/ws";
+final String registerUrl = "http://\$baseUrl/api/register";
+final String loginUrl = "http://\$baseUrl/api/login";
+final String webSocketBaseUrl = "ws://\$baseUrl/ws";
 
 // Example of how to construct the WebSocket URL with a token:
 // String getWebSocketUrlWithToken(String token) {
