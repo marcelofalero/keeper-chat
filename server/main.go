@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"errors"
-	"keeper/server/adapters/sqlite"
+	authsqlite "keeper/server/adapters/auth/sqlite"          // For userRepo
+	messagingsqlite "keeper/server/adapters/messaging/sqlite" // For messageRepo
 	"keeper/server/core/ports"
 	"keeper/server/core/services"
 	"keeper/server/models"
@@ -217,13 +218,13 @@ func main() {
 	defer db.Close()
 
 	// Create and initialize message repository
-	messageRepo := sqlite.NewSQLiteRepository(db)
+	messageRepo := messagingsqlite.NewSQLiteRepository(db)
 	if err := messageRepo.InitSchema(); err != nil {
 		log.Fatalf("Failed to initialize message database schema: %v", err)
 	}
 
 	// Create and initialize user repository
-	userRepo := sqlite.NewSQLiteUserRepository(db)
+	userRepo := authsqlite.NewSQLiteUserRepository(db)
 	if err := userRepo.InitUserSchema(); err != nil {
 		log.Fatalf("Failed to initialize user database schema: %v", err)
 	}
