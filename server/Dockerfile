@@ -14,7 +14,6 @@ COPY . .
 # Build the application
 # CGO_ENABLED=0 for static linking, GOOS=linux for cross-compilation if build env differs
 # Output binary named 'keeper'
-
 RUN go build -o keeper .
 
 # Stage 2: Create the final lightweight image
