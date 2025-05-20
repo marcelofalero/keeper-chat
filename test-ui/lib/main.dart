@@ -268,6 +268,10 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _loginUser() async {
+    log('_loginUser: Method called. Username: "${_usernameController.text}", Password: "${_passwordController.text.isNotEmpty ? "provided" : "empty"}"');
+    // This next log will also trigger the getter log from api_config.dart if it's the first access in a sequence
+    log('_loginUser: Attempting to use loginUrl from config: $loginUrl');
+
     if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
       setState(() {
         _loginErrorMsg = "Username and password cannot be empty.";
@@ -281,18 +285,27 @@ class _ChatPageState extends State<ChatPage> {
     });
 
     try {
-      // log('Attempting to login to: $loginUrl'); // Use from api_config.dart
+      final uri = Uri.parse(loginUrl); // loginUrl is from api_config.dart
+      log('_loginUser: Parsed URI: ${uri.toString()}');
+
+      final requestBodyMap = <String, String>{
+        'username': _usernameController.text,
+        'password': _passwordController.text,
+      };
+      final requestBodyJson = jsonEncode(requestBodyMap);
+      log('_loginUser: Request body (JSON): $requestBodyJson');
+
+      final requestHeaders = {'Content-Type': 'application/json; charset=UTF-8'};
+      log('_loginUser: Making POST request to ${uri.toString()} with headers: $requestHeaders');
+
       final response = await http.post(
-        Uri.parse(loginUrl), // from api_config.dart
-        headers: {'Content-Type': 'application/json; charset=UTF-8'},
-        body: jsonEncode(<String, String>{
-          'username': _usernameController.text,
-          'password': _passwordController.text,
-        }),
+        uri,
+        headers: requestHeaders,
+        body: requestBodyJson,
       );
 
-      // log('Login response status: ${response.statusCode}');
-      // log('Login response body: ${response.body}');
+      // log('Login response status: ${response.statusCode}'); // Existing log, can be kept or removed if too verbose
+      // log('Login response body: ${response.body}'); // Existing log, can be kept or removed
 
       if (response.statusCode == 200) {
         final responseBody = jsonDecode(response.body);
@@ -334,7 +347,7 @@ class _ChatPageState extends State<ChatPage> {
         log('Login failed. Status: ${response.statusCode}, Body: ${response.body}');
       }
     } catch (e) {
-      log('Login error: $e');
+      log('_loginUser: Exception during HTTP POST: $e'); // Confirm this log exists
       setState(() {
         _loginErrorMsg = 'An error occurred during login: $e';
         _isLoading = false;

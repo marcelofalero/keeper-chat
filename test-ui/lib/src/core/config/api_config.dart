@@ -1,4 +1,5 @@
 // lib/src/core/config/api_config.dart
+import 'dart:developer'; // For log()
 
 // TODO: Consider using environment variables for baseUrl in a real app.
 const String defaultBaseUrl = "localhost:8080"; 
@@ -8,9 +9,28 @@ const String defaultBaseUrl = "localhost:8080";
 // This simple string approach is for basic test UI purposes.
 const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: defaultBaseUrl);
 
-String get registerUrl => "http://\$baseUrl/api/register";
-String get loginUrl => "http://\$baseUrl/api/login";
-String get webSocketBaseUrl => "ws://\$baseUrl/ws";
+// Note: baseUrl's value is logged from within each getter when it's first accessed.
+
+String get registerUrl {
+  log('api_config: baseUrl value is: $baseUrl');
+  final constructedUrl = "http://$baseUrl/api/register";
+  log('api_config: registerUrl getter returning: $constructedUrl');
+  return constructedUrl;
+}
+
+String get loginUrl {
+  log('api_config: baseUrl value is: $baseUrl');
+  final constructedUrl = "http://$baseUrl/api/login";
+  log('api_config: loginUrl getter returning: $constructedUrl');
+  return constructedUrl;
+}
+
+String get webSocketBaseUrl {
+  log('api_config: baseUrl value is: $baseUrl');
+  final constructedUrl = "ws://$baseUrl/ws";
+  log('api_config: webSocketBaseUrl getter returning: $constructedUrl');
+  return constructedUrl;
+}
 
 // Example of how to construct the WebSocket URL with a token:
 // String getWebSocketUrlWithToken(String token) {
