@@ -1,7 +1,8 @@
 # Stage 1: Build the Go application
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
+RUN apk add --no-cache gcc musl-dev
 
 # Copy go.mod and go.sum files to download dependencies
 COPY go.mod go.sum ./
@@ -13,7 +14,8 @@ COPY . .
 # Build the application
 # CGO_ENABLED=0 for static linking, GOOS=linux for cross-compilation if build env differs
 # Output binary named 'keeper'
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o keeper .
+
+RUN go build -o keeper .
 
 # Stage 2: Create the final lightweight image
 FROM alpine:latest
