@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:developer'; // For log()
+import 'package:http/http.dart' as http;
+import 'dart:convert'; // For jsonEncode and jsonDecode
+// Assuming 'test_ui' is the package name in pubspec.yaml
+import 'package:test_ui/src/core/config/api_config.dart'; 
 
 void main() {
   runApp(const MyApp());
@@ -33,17 +37,22 @@ class _ChatPageState extends State<ChatPage> {
   final List<String> _messages = []; // Stores chat messages for display
   final TextEditingController _messageInputController = TextEditingController();
 
-  // Placeholder for username and password controllers if we were to handle input
-  // final TextEditingController _usernameController = TextEditingController();
-  // final TextEditingController _passwordController = TextEditingController();
+  // Username and password controllers
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  // Authentication & State variables
+  String? _jwtToken;
+  String? _loginErrorMsg;
+  bool _isLoading = false; // To show loading indicator
   
   // TODO: Add methods for actual login, registration, message sending/receiving later
 
   @override
   void dispose() {
     _messageInputController.dispose();
-    // _usernameController.dispose();
-    // _passwordController.dispose();
+    _usernameController.dispose(); // Dispose username controller
+    _passwordController.dispose(); // Dispose password controller
     super.dispose();
   }
 
@@ -62,9 +71,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _buildLoginRegisterUi() {
-    // TODO: Add TextEditingControllers for username and password if needed for real functionality
-    // final _usernameController = TextEditingController();
-    // final _passwordController = TextEditingController();
+    // _usernameController and _passwordController are now instance members of _ChatPageState
 
     return Center( // Center the content
       child: SingleChildScrollView( // Allow scrolling if content overflows
@@ -79,9 +86,9 @@ class _ChatPageState extends State<ChatPage> {
             ),
             const SizedBox(height: 24),
             // TODO: Replace with actual TextFormField for validation if building a real form
-            const TextField(
-              // controller: _usernameController,
-              decoration: InputDecoration(
+            TextField( // Changed from const TextField
+              controller: _usernameController, // Assign controller
+              decoration: const InputDecoration( // Can be const
                 labelText: 'Username',
                 border: OutlineInputBorder(),
                 hintText: 'Enter your username',
@@ -89,9 +96,9 @@ class _ChatPageState extends State<ChatPage> {
               keyboardType: TextInputType.text,
             ),
             const SizedBox(height: 12),
-            const TextField(
-              // controller: _passwordController,
-              decoration: InputDecoration(
+            TextField( // Changed from const TextField
+              controller: _passwordController, // Assign controller
+              decoration: const InputDecoration( // Can be const
                 labelText: 'Password',
                 border: OutlineInputBorder(),
                 hintText: 'Enter your password',
@@ -99,20 +106,25 @@ class _ChatPageState extends State<ChatPage> {
               obscureText: true,
             ),
             const SizedBox(height: 24),
+            if (_loginErrorMsg != null && _loginErrorMsg!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Text(
+                  _loginErrorMsg!,
+                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-              onPressed: () {
-                // TODO: Implement actual login logic
-                // 1. Get username and password from controllers
-                // 2. Call API: http.post(Uri.parse(loginUrl), body: {'username': username, 'password': password})
-                // 3. If successful, store token and set _isAuthenticated = true
-                // 4. If error, show error message
-                log("Login button pressed (placeholder)"); // Use log from dart:developer
-                setState(() {
-                  _isAuthenticated = true; // Simulate successful login for now
-                });
-              },
-              child: const Text('Login'),
+              onPressed: _isLoading ? null : _loginUser, // Updated onPressed
+              child: _isLoading 
+                  ? const SizedBox(
+                      height: 20, // Consistent height for the indicator
+                      width: 20, 
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0)
+                    )
+                  : const Text('Login'), // Updated child
             ),
             const SizedBox(height: 12),
             OutlinedButton(
@@ -146,6 +158,20 @@ class _ChatPageState extends State<ChatPage> {
 
     return Column(
       children: <Widget>[
+        if (_jwtToken != null) // Display token if available
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              'Token: $_jwtToken',
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+              overflow: TextOverflow.ellipsis, // Handle long tokens
+            ),
+          ),
+        const Text(
+          "// TODO: Use FlutterSecureStorage for production token handling.",
+          style: TextStyle(fontSize: 10, color: Colors.orange),
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 8),
         const Text(
           "// TODO: Implement WebSocket connection here.",
@@ -202,14 +228,17 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
         ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent), // Optional: Style logout button
           onPressed: () {
             setState(() {
-              _isAuthenticated = false; // Simulate logout
-              _messages.clear(); // Clear messages on logout
+              _isAuthenticated = false;
+              _jwtToken = null; // Clear the token
+              _messages.clear(); 
+              _loginErrorMsg = null; // Also clear any lingering login errors
             });
-            log("Logout button pressed");
+            log("Logout button pressed. Token cleared.");
           },
-          child: const Text("Logout (placeholder)"),
+          child: const Text("Logout"), // Removed "placeholder"
         ),
         const SizedBox(height: 8),
       ],
@@ -236,5 +265,80 @@ class _ChatPageState extends State<ChatPage> {
       }
     });
     _messageInputController.clear();
+  }
+
+  Future<void> _loginUser() async {
+    if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
+      setState(() {
+        _loginErrorMsg = "Username and password cannot be empty.";
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _loginErrorMsg = null; // Clear previous error
+    });
+
+    try {
+      // log('Attempting to login to: $loginUrl'); // Use from api_config.dart
+      final response = await http.post(
+        Uri.parse(loginUrl), // from api_config.dart
+        headers: {'Content-Type': 'application/json; charset=UTF-8'},
+        body: jsonEncode(<String, String>{
+          'username': _usernameController.text,
+          'password': _passwordController.text,
+        }),
+      );
+
+      // log('Login response status: ${response.statusCode}');
+      // log('Login response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseBody = jsonDecode(response.body);
+        final token = responseBody['token'] as String?;
+        if (token != null) {
+          setState(() {
+            _jwtToken = token;
+            _isAuthenticated = true;
+            _isLoading = false;
+            _loginErrorMsg = null;
+            // Clear text fields after successful login
+            _usernameController.clear();
+            _passwordController.clear();
+          });
+          log('Login successful. Token: $_jwtToken');
+        } else {
+          setState(() {
+            _loginErrorMsg = 'Login successful, but no token received.';
+            _isLoading = false;
+          });
+          log('Login successful but no token in response.');
+        }
+      } else {
+        // Try to parse error from response body, e.g. { "error": "message" }
+        String serverError = 'Invalid username or password.'; // Default
+        try {
+          final responseBody = jsonDecode(response.body);
+          if (responseBody['error'] != null) {
+            serverError = responseBody['error'] as String;
+          }
+        } catch (e) {
+          // Ignore if response body is not JSON or doesn't have 'error'
+          log('Could not parse error from response body: $e');
+        }
+        setState(() {
+          _loginErrorMsg = 'Login failed: $serverError (Status: ${response.statusCode})';
+          _isLoading = false;
+        });
+        log('Login failed. Status: ${response.statusCode}, Body: ${response.body}');
+      }
+    } catch (e) {
+      log('Login error: $e');
+      setState(() {
+        _loginErrorMsg = 'An error occurred during login: $e';
+        _isLoading = false;
+      });
+    }
   }
 }
