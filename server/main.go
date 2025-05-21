@@ -397,7 +397,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
-	dbPath := os.Getenv("DB_PATH")
+	dbPath := os.Getenv("KEEPER_DB_PATH") // Changed from DB_PATH
 	if dbPath == "" {
 		dbPath = "./keeper.db" // Default path
 	}
