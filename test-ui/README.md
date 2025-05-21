@@ -46,3 +46,14 @@ This file contains:
     -   `web_socket_channel` for WebSocket communication.
     -   A state management solution (Provider, Riverpod, BLoC, GetX, etc.) for managing application state (like authentication tokens, messages).
 -   The example code within `api_config.dart` provides hints on using these packages.
+
+## Debugging & Viewing Logs
+
+When running the Flutter web application (either locally with `flutter run -d chrome` or via the Docker container at `http://localhost:8081`):
+
+-   **Browser Developer Console:** Application logs, including those added for debugging API calls (from `api_config.dart` and `main.dart`), will appear in your web browser's developer console.
+    -   To open the console:
+        -   In Chrome: Right-click on the page -> "Inspect" -> "Console" tab.
+        -   In Firefox: Right-click on the page -> "Inspect Element" -> "Console" tab.
+        -   Other browsers have similar tools.
+-   Look for messages prefixed with `api_config:` or `_loginUser:` to trace the URL construction and API call details.
