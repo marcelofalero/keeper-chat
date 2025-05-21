@@ -3,13 +3,16 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"encoding/base64" // Added for Basic Auth
 	"log"
 	"net/http"
 	"os"
+	"path/filepath" // Added for directory operations
+	"strings"       // Added for Basic Auth
 	"time"
 
 	"errors"
-	authsqlite "keeper/server/adapters/auth/sqlite"          // For userRepo
+	authsqlite "keeper/server/adapters/auth/sqlite" // For userRepo
 	messagingsqlite "keeper/server/adapters/messaging/sqlite" // For messageRepo
 	"keeper/server/core/ports"
 	"keeper/server/core/services"
@@ -171,30 +174,62 @@ func loginHandler(authSvc ports.AuthService) http.HandlerFunc {
 			return
 		}
 
-		var req AuthRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, http.StatusBadRequest, "Invalid request payload")
-			return
-		}
-		defer r.Body.Close()
-
-		if req.Username == "" || req.Password == "" {
-			respondError(w, http.StatusBadRequest, "Username and password are required")
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			respondError(w, http.StatusUnauthorized, "Authorization header is missing")
 			return
 		}
 
-		tokenString, err := authSvc.Login(req.Username, req.Password)
+		if !strings.HasPrefix(authHeader, "Basic ") {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			respondError(w, http.StatusUnauthorized, "Invalid authorization method, Basic method required")
+			return
+		}
+
+		encodedCredentials := strings.TrimPrefix(authHeader, "Basic ")
+		decodedCredentials, err := base64.StdEncoding.DecodeString(encodedCredentials)
 		if err != nil {
-			switch {
-			case errors.Is(err, services.ErrInvalidCredentials):
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			respondError(w, http.StatusUnauthorized, "Invalid Base64 encoding in authorization header")
+			return
+		}
+
+		credentials := strings.SplitN(string(decodedCredentials), ":", 2)
+		if len(credentials) != 2 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			respondError(w, http.StatusUnauthorized, "Invalid format for credentials in authorization header")
+			return
+		}
+
+		username := credentials[0]
+		password := credentials[1]
+
+		if username == "" || password == "" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			respondError(w, http.StatusUnauthorized, "Username or password cannot be empty")
+			return
+		}
+		
+		// Call VerifyUserCredentials to check username and password.
+		// The returned user object is not strictly needed here since we're issuing a hardcoded token.
+		_, err := authSvc.VerifyUserCredentials(username, password)
+		if err != nil {
+			log.Printf("Basic Auth: VerifyUserCredentials failed for user '%s': %v", username, err)
+			if errors.Is(err, services.ErrInvalidCredentials) {
+				w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
 				respondError(w, http.StatusUnauthorized, "Invalid username or password")
-			default:
-				log.Printf("Error during login for user '%s': %v", req.Username, err)
-				respondError(w, http.StatusInternalServerError, "Failed to login")
+			} else {
+				// For other unexpected errors from VerifyUserCredentials
+				respondError(w, http.StatusInternalServerError, "User authentication failed due to a server error")
 			}
 			return
 		}
-		respondJSON(w, http.StatusOK, AuthResponse{Token: tokenString})
+
+		// Credentials are valid. Respond with the hardcoded token.
+		// Using services.HardcodedUserAuthToken ensures consistency.
+		log.Printf("Basic Auth: User '%s' credentials verified successfully.", username)
+		respondJSON(w, http.StatusOK, AuthResponse{Token: services.HardcodedUserAuthToken})
 	}
 }
 
@@ -367,12 +402,36 @@ func main() {
 		dbPath = "./keeper.db" // Default path
 	}
 
-	// Open SQLite database connection
-	db, err := sql.Open("sqlite3", dbPath)
+	// Ensure the database directory exists
+	dbDir := filepath.Dir(dbPath)
+	// Check if dbDir is "." (current directory), no need to create if so,
+	// unless dbPath itself is just a filename like "keeper.db" (dbDir will be ".")
+	// or if it's like "./data/keeper.db" (dbDir will be "./data").
+	// The os.MkdirAll will handle the "." case correctly (no-op).
+	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
+		log.Printf("Database directory %s does not exist, creating it.", dbDir)
+		if err := os.MkdirAll(dbDir, 0755); err != nil { // 0755 gives rwx for owner, rx for group/other
+			log.Fatalf("Failed to create database directory %s: %v", dbDir, err)
+		}
+	} else if err != nil {
+		// This covers other errors from os.Stat, like permission issues.
+		log.Fatalf("Failed to check database directory %s: %v", dbDir, err)
+	}
+
+	// Open SQLite database connection with foreign key support enabled
+	dbDSN := dbPath + "?_foreign_keys=on"
+	log.Printf("Opening database connection to: %s (using DSN: %s)", dbPath, dbDSN)
+	db, err := sql.Open("sqlite3", dbDSN)
 	if err != nil {
 		log.Fatalf("Failed to open database at %s: %v", dbPath, err)
 	}
 	defer db.Close()
+
+	// Ping the database to verify the connection
+	if err = db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database at %s (DSN: %s): %v", dbPath, dbDSN, err)
+	}
+	log.Printf("Successfully connected to and pinged database: %s", dbPath)
 
 	// Create and initialize message repository
 	messageRepo := messagingsqlite.NewSQLiteRepository(db) // This is ports.MessageRepository

@@ -341,23 +341,23 @@ class _ChatPageState extends State<ChatPage> {
       final uri = Uri.parse(loginUrl); // loginUrl is from api_config.dart
       log('_loginUser: Parsed URI: ${uri.toString()}');
 
-      final requestBodyMap = <String, String>{
-        'username': _usernameController.text,
-        'password': _passwordController.text,
-      };
-      final requestBodyJson = jsonEncode(requestBodyMap);
-      log('_loginUser: Request body (JSON): $requestBodyJson');
+      // Create Basic Auth credentials
+      final String credentials = '${_usernameController.text}:${_passwordController.text}';
+      final String encodedCredentials = base64Encode(utf8.encode(credentials));
+      log('_loginUser: Basic Auth encoded credentials: $encodedCredentials');
 
-      final requestHeaders = {'Content-Type': 'application/json; charset=UTF-8'};
-      log('_loginUser: Making POST request to ${uri.toString()} with headers: $requestHeaders');
+      final requestHeaders = {
+        'Authorization': 'Basic $encodedCredentials',
+      };
+      log('_loginUser: Making POST request to ${uri.toString()} with Basic Auth header.');
 
       final response = await http.post(
         uri,
         headers: requestHeaders,
-        body: requestBodyJson,
+        // No body for Basic Auth token request as per current server setup
       );
 
-      // log('Login response status: ${response.statusCode}'); // Existing log, can be kept or removed if too verbose
+      // log('Login response status: ${response.statusCode}');
       // log('Login response body: ${response.body}'); // Existing log, can be kept or removed
 
       if (response.statusCode == 200) {

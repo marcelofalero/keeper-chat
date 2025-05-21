@@ -12,7 +12,11 @@ import (
 )
 
 // jwtExpiration defines the duration for which JWT tokens are valid.
+// This constant is no longer used for token generation in this service but kept for context.
 const jwtExpiration = time.Hour * 72
+
+// HardcodedUserAuthToken is used for WebSocket validation and as the token value in login responses.
+const HardcodedUserAuthToken = "HARDCODED_TOKEN_FOR_NOW"
 
 // ErrUserAlreadyExists is returned when trying to register a user that already exists.
 var ErrUserAlreadyExists = errors.New("user already exists")
@@ -96,80 +100,42 @@ func (s *AuthServiceImpl) Register(username, password string) (*models.User, err
 	return createdUser, nil
 }
 
-// Login authenticates a user and returns a JWT token.
-func (s *AuthServiceImpl) Login(username, password string) (string, error) {
+// VerifyUserCredentials checks if the provided username and password match a stored user.
+// It returns the user model (without password hash) on success, or an error on failure.
+func (s *AuthServiceImpl) VerifyUserCredentials(username, password string) (*models.User, error) {
 	user, err := s.userRepo.GetUserByUsername(username)
 	if err != nil {
-		log.Printf("Error fetching user '%s' during login: %v", username, err)
-		return "", ErrInvalidCredentials // Generic error for security
+		// Log specific error, but return generic error to client
+		log.Printf("Error fetching user '%s' during credential verification: %v", username, err)
+		return nil, ErrInvalidCredentials
 	}
 	if user == nil {
-		return "", ErrInvalidCredentials // User not found
+		log.Printf("User '%s' not found during credential verification.", username)
+		return nil, ErrInvalidCredentials // User not found
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
 		// Password mismatch or other bcrypt error
-		return "", ErrInvalidCredentials
+		log.Printf("Password mismatch for user '%s'.", username)
+		return nil, ErrInvalidCredentials
 	}
 
-	// Create claims
-	claims := JwtCustomClaims{
-		Username: user.Username,
-		UserID:   user.ID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(jwtExpiration)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "keeper-server", // Optional: identifies the issuer
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(s.jwtSecret)
-	if err != nil {
-		log.Printf("Error signing token for user '%s': %v", username, err)
-		return "", errors.New("could not generate token")
-	}
-
-	return tokenString, nil
-}
-
-// ValidateToken checks the validity of a JWT token and returns the associated user.
-func (s *AuthServiceImpl) ValidateToken(tokenString string) (*models.User, error) {
-	claims := &JwtCustomClaims{}
-
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		// Check the signing method
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return s.jwtSecret, nil
-	})
-
-	if err != nil {
-		log.Printf("Error parsing token: %v", err)
-		if errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenNotValidYet) {
-			return nil, ErrInvalidToken
-		}
-		return nil, errors.New("could not parse token")
-	}
-
-	if !token.Valid {
-		return nil, ErrInvalidToken
-	}
-
-	// Token is valid, claims are populated. Fetch user for current details.
-	user, err := s.userRepo.GetUserByID(claims.UserID)
-	if err != nil {
-		log.Printf("Error fetching user by ID '%d' after token validation: %v", claims.UserID, err)
-		return nil, errors.New("error verifying token holder")
-	}
-	if user == nil {
-		return nil, ErrUserNotFound // User associated with token no longer exists
-	}
-
-	// Clear password hash before returning
+	// Credentials are valid.
+	log.Printf("Credentials verified for user '%s'.", username)
+	// Clear password hash before returning user model
 	user.PasswordHash = ""
 	return user, nil
+}
+
+// ValidateToken checks the validity of the hardcoded token.
+func (s *AuthServiceImpl) ValidateToken(tokenString string) (*models.User, error) {
+	if tokenString == HardcodedUserAuthToken {
+		// For WebSocket connections, a generic user model is sufficient.
+		log.Printf("Token '%s' validated successfully (hardcoded match).", tokenString)
+		return &models.User{ID: 1, Username: "WebSocketUser"}, nil // Placeholder user
+	}
+
+	log.Printf("Token validation failed for token: '%s'", tokenString)
+	return nil, ErrInvalidToken
 }

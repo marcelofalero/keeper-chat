@@ -111,10 +111,17 @@ func registerUser(serverURL, username, password string) (RegisterHelperResponse,
 }
 
 func loginUser(serverURL, username, password string) (string, error) {
-	reqBody, _ := json.Marshal(map[string]string{"username": username, "password": password})
-	resp, err := http.Post(fmt.Sprintf("%s/api/login", serverURL), "application/json", bytes.NewBuffer(reqBody))
+	// Create a new HTTP request for Basic Auth
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/login", serverURL), nil) // No body
 	if err != nil {
-		return "", fmt.Errorf("failed to login user: %w", err)
+		return "", fmt.Errorf("failed to create login request: %w", err)
+	}
+	req.SetBasicAuth(username, password) // Set Basic Auth header
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute login request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -127,6 +134,11 @@ func loginUser(serverURL, username, password string) (string, error) {
 	var authResp AuthHelperResponse
 	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
 		return "", fmt.Errorf("failed to decode login response: %w", err)
+	}
+
+	// Verify the token is the hardcoded one
+	if authResp.Token != services.HardcodedUserAuthToken {
+		return "", fmt.Errorf("login response token '%s' does not match hardcoded token '%s'", authResp.Token, services.HardcodedUserAuthToken)
 	}
 	return authResp.Token, nil
 }
@@ -185,9 +197,13 @@ func TestWebSocketConnection_Authentication(t *testing.T) {
 	})
 
 	t.Run("InvalidToken", func(t *testing.T) {
-		_, resp, err := connectWebSocket(testServer.URL, "invalid-jwt-token")
+		invalidTokenForTest := "some-completely-invalid-token-string"
+		if invalidTokenForTest == services.HardcodedUserAuthToken { // Precaution if hardcoded token is simple
+			invalidTokenForTest = "another-invalid-token-that-is-different"
+		}
+		_, resp, err := connectWebSocket(testServer.URL, invalidTokenForTest)
 		if err == nil {
-			t.Fatal("Expected WebSocket connection to fail with invalid token, but it succeeded.")
+			t.Fatalf("Expected WebSocket connection to fail with invalid token '%s', but it succeeded.", invalidTokenForTest)
 		}
 		if resp == nil {
 			t.Fatalf("Expected non-nil HTTP response on handshake failure, got nil. Error: %v", err)
