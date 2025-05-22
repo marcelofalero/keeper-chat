@@ -435,12 +435,14 @@ func main() {
 
 	// Create and initialize message repository
 	messageRepo := messagingsqlite.NewSQLiteRepository(db) // This is ports.MessageRepository
+	log.Printf("Attempting to initialize message schema for database at: %s", dbPath)
 	if err := messageRepo.InitSchema(); err != nil {
 		log.Fatalf("Failed to initialize message database schema: %v", err)
 	}
 
 	// Create and initialize user repository
 	userRepo := authsqlite.NewSQLiteUserRepository(db) // This is ports.UserRepository
+	log.Printf("Attempting to initialize user schema for database at: %s", dbPath)
 	if err := userRepo.InitUserSchema(); err != nil {
 		log.Fatalf("Failed to initialize user database schema: %v", err)
 	}
