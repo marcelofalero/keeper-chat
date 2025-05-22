@@ -39,6 +39,23 @@ func (s *SQLiteRepository) InitSchema() error {
 		return err
 	}
 	log.Println("Database schema initialized successfully.")
+
+	// Diagnostic INSERT
+	diagQueryMsgInsert := "INSERT INTO messages (user, text, timestamp) VALUES ('_diag_test_msg_user_', '_diag_test_text_', CURRENT_TIMESTAMP)"
+	_, errInsertMsg := s.db.Exec(diagQueryMsgInsert)
+	if errInsertMsg != nil {
+		log.Printf("Diagnostic: FAILED to INSERT into messages table: %v", errInsertMsg)
+	} else {
+		log.Printf("Diagnostic: Successfully INSERTED a temporary row into messages table.")
+		// Diagnostic DELETE
+		diagQueryMsgDelete := "DELETE FROM messages WHERE user = '_diag_test_msg_user_'"
+		_, errDeleteMsg := s.db.Exec(diagQueryMsgDelete)
+		if errDeleteMsg != nil {
+			log.Printf("Diagnostic: FAILED to DELETE temporary row from messages table: %v", errDeleteMsg)
+		} else {
+			log.Printf("Diagnostic: Successfully DELETED temporary row from messages table.")
+		}
+	}
 	return nil
 }
 

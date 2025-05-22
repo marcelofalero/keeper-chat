@@ -36,6 +36,23 @@ func (s *SQLiteUserRepository) InitUserSchema() error {
 		return err
 	}
 	log.Println("User schema initialized successfully.")
+
+	// Diagnostic INSERT
+	diagQueryUserInsert := "INSERT INTO users (username, password_hash) VALUES ('_diag_test_user_', '_diag_hash_')"
+	_, errInsert := s.db.Exec(diagQueryUserInsert)
+	if errInsert != nil {
+		log.Printf("Diagnostic: FAILED to INSERT into users table: %v", errInsert)
+	} else {
+		log.Printf("Diagnostic: Successfully INSERTED a temporary row into users table.")
+		// Diagnostic DELETE
+		diagQueryUserDelete := "DELETE FROM users WHERE username = '_diag_test_user_'"
+		_, errDelete := s.db.Exec(diagQueryUserDelete)
+		if errDelete != nil {
+			log.Printf("Diagnostic: FAILED to DELETE temporary row from users table: %v", errDelete)
+		} else {
+			log.Printf("Diagnostic: Successfully DELETED temporary row from users table.")
+		}
+	}
 	return nil
 }
 
