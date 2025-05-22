@@ -214,8 +214,7 @@ func loginHandler(authSvc ports.AuthService) http.HandlerFunc {
 		// Call VerifyUserCredentials to check username and password.
 		// The returned user object is not strictly needed here since we're issuing a hardcoded token.
 		// 'err' is already declared from base64.StdEncoding.DecodeString, so use '=' for assignment.
-		var user *models.User // We don't use the user, but need to declare it for the assignment
-		user, err = authSvc.VerifyUserCredentials(username, password)
+		_, err = authSvc.VerifyUserCredentials(username, password)
 		if err != nil {
 			log.Printf("Basic Auth: VerifyUserCredentials failed for user '%s': %v", username, err)
 			if errors.Is(err, services.ErrInvalidCredentials) {
