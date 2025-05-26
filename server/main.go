@@ -1,22 +1,25 @@
 package main
 
 import (
-	"database/sql"
+	// "database/sql" // No longer directly used in main
 	"encoding/json"
 	"encoding/base64" // Added for Basic Auth
 	"log"
 	"net/http"
 	"os"
-	"path/filepath" // Added for directory operations
+	// "path/filepath" // No longer directly used in main
 	"strings"       // Added for Basic Auth
 	"time"
 
 	"errors"
-	authsqlite "keeper/server/adapters/auth/sqlite" // For userRepo
+	authmemory "keeper/server/adapters/auth/memory"         // Added for in-memory user repo
+	authsqlite "keeper/server/adapters/auth/sqlite"         // For userRepo
+	messagingmemory "keeper/server/adapters/messaging/memory" // Added for in-memory message repo
 	messagingsqlite "keeper/server/adapters/messaging/sqlite" // For messageRepo
 	"keeper/server/core/ports"
 	"keeper/server/core/services"
 	"keeper/server/models"
+	"keeper/server/seeder" // Added seeder package
 	"sync"
 	// "strings" // No longer needed directly in wsHandler for Bearer token
 
@@ -398,54 +401,76 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
-	dbPath := os.Getenv("KEEPER_DB_PATH") // Changed from DB_PATH
+	// Determine dbPath early, but log its usage only if SQLite is selected.
+	dbPath := os.Getenv("KEEPER_DB_PATH")
 	if dbPath == "" {
 		dbPath = "./keeper.db" // Default path
+		// Logging for default path usage will happen inside sqlite/default cases
 	}
 
-	// Ensure the database directory exists
-	dbDir := filepath.Dir(dbPath)
-	// Check if dbDir is "." (current directory), no need to create if so,
-	// unless dbPath itself is just a filename like "keeper.db" (dbDir will be ".")
-	// or if it's like "./data/keeper.db" (dbDir will be "./data").
-	// The os.MkdirAll will handle the "." case correctly (no-op).
-	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
-		log.Printf("Database directory %s does not exist, creating it.", dbDir)
-		if err := os.MkdirAll(dbDir, 0755); err != nil { // 0755 gives rwx for owner, rx for group/other
-			log.Fatalf("Failed to create database directory %s: %v", dbDir, err)
+	storageAdapter := os.Getenv("STORAGE_ADAPTER")
+	log.Printf("STORAGE_ADAPTER environment variable is set to: '%s'", storageAdapter)
+
+	var userRepo ports.UserRepository
+	var messageRepo ports.MessageRepository
+	var err error // Declare error variable for SQLite constructors
+
+	switch storageAdapter {
+	case "memory":
+		log.Println("Initializing with in-memory storage adapters.")
+		userRepo = authmemory.NewInMemoryUserRepository()
+		// In-memory repo New functions typically don't return an error for simple map init
+		// but we call InitUserSchema for consistency with the interface, though it's a no-op.
+		if err = userRepo.InitUserSchema(); err != nil {
+			log.Fatalf("Failed to initialize in-memory user repository schema (no-op should not fail): %v", err)
 		}
-	} else if err != nil {
-		// This covers other errors from os.Stat, like permission issues.
-		log.Fatalf("Failed to check database directory %s: %v", dbDir, err)
-	}
+		messageRepo = messagingmemory.NewInMemoryMessageRepository()
+		if err = messageRepo.InitSchema(); err != nil {
+			log.Fatalf("Failed to initialize in-memory message repository schema (no-op should not fail): %v", err)
+		}
+		log.Println("In-memory repositories initialized successfully.")
+	case "sqlite":
+		log.Println("Initializing with SQLite storage adapters.")
+		if dbPath == "./keeper.db" && os.Getenv("KEEPER_DB_PATH") == "" {
+			log.Printf("KEEPER_DB_PATH not set, using default for SQLite: %s", dbPath)
+		} else if os.Getenv("KEEPER_DB_PATH") != "" { // dbPath would be this value
+			log.Printf("Using database path from KEEPER_DB_PATH for SQLite: %s", dbPath)
+		} else { // dbPath is default but KEEPER_DB_PATH was set to "./keeper.db"
+			log.Printf("Using explicitly set KEEPER_DB_PATH for SQLite: %s", dbPath)
+		}
 
-	// Open SQLite database connection with foreign key support enabled
-	dbDSN := dbPath + "?_foreign_keys=on"
-	log.Printf("Opening database connection to: %s (using DSN: %s)", dbPath, dbDSN)
-	db, err := sql.Open("sqlite3", dbDSN)
-	if err != nil {
-		log.Fatalf("Failed to open database at %s: %v", dbPath, err)
-	}
-	defer db.Close()
+		userRepo, err = authsqlite.NewSQLiteUserRepository(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize SQLite user repository: %v", err)
+		}
+		log.Println("SQLite User repository initialized successfully.")
 
-	// Ping the database to verify the connection
-	if err = db.Ping(); err != nil {
-		log.Fatalf("Failed to ping database at %s (DSN: %s): %v", dbPath, dbDSN, err)
-	}
-	log.Printf("Successfully connected to and pinged database: %s", dbPath)
+		messageRepo, err = messagingsqlite.NewSQLiteRepository(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize SQLite message repository: %v", err)
+		}
+		log.Println("SQLite Message repository initialized successfully.")
+	default:
+		log.Printf("No valid STORAGE_ADAPTER specified or value is '%s'. Defaulting to SQLite.", storageAdapter)
+		if dbPath == "./keeper.db" && os.Getenv("KEEPER_DB_PATH") == "" {
+			log.Printf("KEEPER_DB_PATH not set, using default for SQLite: %s", dbPath)
+		} else if os.Getenv("KEEPER_DB_PATH") != "" {
+			log.Printf("Using database path from KEEPER_DB_PATH for SQLite: %s", dbPath)
+		} else {
+			log.Printf("Using explicitly set KEEPER_DB_PATH for SQLite: %s", dbPath)
+		}
 
-	// Create and initialize message repository
-	messageRepo := messagingsqlite.NewSQLiteRepository(db) // This is ports.MessageRepository
-	log.Printf("Attempting to initialize message schema for database at: %s", dbPath)
-	if err := messageRepo.InitSchema(); err != nil {
-		log.Fatalf("Failed to initialize message database schema: %v", err)
-	}
+		userRepo, err = authsqlite.NewSQLiteUserRepository(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize SQLite user repository (default): %v", err)
+		}
+		log.Println("SQLite User repository initialized successfully (default).")
 
-	// Create and initialize user repository
-	userRepo := authsqlite.NewSQLiteUserRepository(db) // This is ports.UserRepository
-	log.Printf("Attempting to initialize user schema for database at: %s", dbPath)
-	if err := userRepo.InitUserSchema(); err != nil {
-		log.Fatalf("Failed to initialize user database schema: %v", err)
+		messageRepo, err = messagingsqlite.NewSQLiteRepository(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize SQLite message repository (default): %v", err)
+		}
+		log.Println("SQLite Message repository initialized successfully (default).")
 	}
 
 	// Initialize Auth Service
@@ -455,6 +480,16 @@ func main() {
 		log.Println("Warning: Using hardcoded JWT_SECRET. This is not secure for production.")
 	}
 	authSvc := services.NewAuthService(userRepo, jwtSecret)
+
+	// Load fixtures
+	// The path "./server/fixtures" assumes the binary is run from the project root (/app in Docker).
+	log.Println("Attempting to load fixtures...")
+	if err := seeder.LoadFixtures(userRepo, messageRepo, authSvc, "./server/fixtures"); err != nil {
+		// Log the error but don't make it fatal, as per current design.
+		log.Printf("Warning: Fixture loading process encountered an error: %v", err)
+	} else {
+		log.Println("Fixture loading process completed successfully.")
+	}
 
 	// Setup HTTP handlers with CORS middleware
 	http.Handle("/api/register", corsMiddleware(registerHandler(authSvc))) // authSvc is ports.AuthService

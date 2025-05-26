@@ -7,4 +7,5 @@ type AuthService interface {
 	Register(username, password string) (*models.User, error)
 	VerifyUserCredentials(username, password string) (*models.User, error)
 	ValidateToken(tokenString string) (*models.User, error)
+	HashPassword(password string) (string, error)
 }

@@ -2,8 +2,11 @@ package sqlite
 
 import (
 	"database/sql"
+	"fmt" // For error wrapping
 	"log"
-	"time" // Included for completeness, may be used by specific timestamp logic later
+	"os"             // Added for os.Stat and os.MkdirAll
+	"path/filepath"  // Added for filepath.Dir
+	"time"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 	"keeper/server/core/ports"
@@ -19,9 +22,45 @@ type SQLiteRepository struct {
 }
 
 // NewSQLiteRepository creates a new instance of SQLiteRepository.
-// It takes a *sql.DB database connection as input.
-func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
-	return &SQLiteRepository{db: db}
+// It handles database directory creation, connection, and schema initialization.
+func NewSQLiteRepository(dbPath string) (*SQLiteRepository, error) {
+	// Ensure the database directory exists
+	dbDir := filepath.Dir(dbPath)
+	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
+		log.Printf("Message repository: Database directory %s does not exist, creating it.", dbDir)
+		if err = os.MkdirAll(dbDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create message DB directory %s: %w", dbDir, err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to check message DB directory %s: %w", dbDir, err)
+	}
+
+	// Construct DSN and open database connection
+	dbDSN := dbPath + "?_foreign_keys=on"
+	log.Printf("Message repository: Opening database connection to: %s (using DSN: %s)", dbPath, dbDSN)
+	db, err := sql.Open("sqlite3", dbDSN)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open message DB at %s: %w", dbPath, err)
+	}
+
+	// Ping the database to verify the connection
+	if err = db.Ping(); err != nil {
+		db.Close() // Close DB if ping fails
+		return nil, fmt.Errorf("failed to ping message DB at %s (DSN: %s): %w", dbPath, dbDSN, err)
+	}
+	log.Printf("Message repository: Successfully connected to and pinged database: %s", dbPath)
+
+	repo := &SQLiteRepository{db: db}
+
+	// Initialize schema
+	log.Printf("Message repository: Attempting to initialize message schema for database at: %s", dbPath)
+	if err = repo.InitSchema(); err != nil {
+		db.Close() // Close DB if schema initialization fails
+		return nil, fmt.Errorf("failed to initialize message schema for DB at %s: %w", dbPath, err)
+	}
+	// The InitSchema method itself logs success/failure of diagnostics.
+
+	return repo, nil
 }
 
 // InitSchema creates the necessary database schema (tables) if they don't already exist.
@@ -39,23 +78,7 @@ func (s *SQLiteRepository) InitSchema() error {
 		return err
 	}
 	log.Println("Database schema initialized successfully.")
-
-	// Diagnostic INSERT
-	diagQueryMsgInsert := "INSERT INTO messages (user, text, timestamp) VALUES ('_diag_test_msg_user_', '_diag_test_text_', CURRENT_TIMESTAMP)"
-	_, errInsertMsg := s.db.Exec(diagQueryMsgInsert)
-	if errInsertMsg != nil {
-		log.Printf("Diagnostic: FAILED to INSERT into messages table: %v", errInsertMsg)
-	} else {
-		log.Printf("Diagnostic: Successfully INSERTED a temporary row into messages table.")
-		// Diagnostic DELETE
-		diagQueryMsgDelete := "DELETE FROM messages WHERE user = '_diag_test_msg_user_'"
-		_, errDeleteMsg := s.db.Exec(diagQueryMsgDelete)
-		if errDeleteMsg != nil {
-			log.Printf("Diagnostic: FAILED to DELETE temporary row from messages table: %v", errDeleteMsg)
-		} else {
-			log.Printf("Diagnostic: Successfully DELETED temporary row from messages table.")
-		}
-	}
+	// Removed diagnostic INSERT/DELETE block for messages table.
 	return nil
 }
 

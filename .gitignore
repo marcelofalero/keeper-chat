@@ -40,4 +40,3 @@ test-ui/.flutter-plugins-dependencies
 
 # Local data (SQLite DB via bind mount)
 ./data/
-/data/keeper.db

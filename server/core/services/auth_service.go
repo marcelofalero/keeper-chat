@@ -39,8 +39,9 @@ type JwtCustomClaims struct {
 
 // AuthServiceImpl implements the ports.AuthService interface.
 type AuthServiceImpl struct {
-	userRepo  ports.UserRepository
-	jwtSecret []byte
+	userRepo   ports.UserRepository
+	jwtSecret  []byte
+	bcryptCost int // Added bcrypt cost
 }
 
 // Verify AuthServiceImpl implements ports.AuthService
@@ -49,9 +50,20 @@ var _ ports.AuthService = (*AuthServiceImpl)(nil)
 // NewAuthService creates a new instance of AuthServiceImpl.
 func NewAuthService(userRepo ports.UserRepository, jwtSecret string) *AuthServiceImpl {
 	return &AuthServiceImpl{
-		userRepo:  userRepo,
-		jwtSecret: []byte(jwtSecret),
+		userRepo:   userRepo,
+		jwtSecret:  []byte(jwtSecret),
+		bcryptCost: bcrypt.DefaultCost, // Initialize bcryptCost
 	}
+}
+
+// HashPassword generates a bcrypt hash for the given password.
+func (s *AuthServiceImpl) HashPassword(password string) (string, error) {
+	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCost)
+	if err != nil {
+		log.Printf("Error hashing password: %v", err) // Log the error
+		return "", err
+	}
+	return string(hashedPasswordBytes), nil
 }
 
 // Register creates a new user account.
@@ -66,15 +78,17 @@ func (s *AuthServiceImpl) Register(username, password string) (*models.User, err
 		return nil, ErrUserAlreadyExists
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	// Use s.HashPassword which uses s.bcryptCost
+	hashedPasswordString, err := s.HashPassword(password)
 	if err != nil {
-		log.Printf("Error hashing password for user '%s': %v", username, err)
+		// HashPassword already logs the error, but we can add context
+		log.Printf("Error hashing password for user '%s' during registration: %v", username, err)
 		return nil, errors.New("failed to process registration")
 	}
 
 	newUser := models.User{
 		Username:     username,
-		PasswordHash: string(hashedPassword),
+		PasswordHash: hashedPasswordString, // Use the string from HashPassword
 	}
 
 	err = s.userRepo.CreateUser(newUser)

@@ -1,0 +1,8 @@
+# Sample users. Rename this file to users.yaml to load these users on startup.
+users:
+  - username: "admin"
+    password: "adminpass"
+  - username: "user1"
+    password: "user1pass"
+  - username: "user2"
+    password: "user2pass"
