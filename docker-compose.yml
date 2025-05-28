@@ -7,12 +7,15 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080" # Expose server port to host
-    environment:
-      - KEEPER_PORT=8080 # Port inside the container
-      - KEEPER_DB_PATH=/data/keeper.db
     volumes:
       - ./data:/data # Bind mount for SQLite database persistence
     restart: unless-stopped
+    environment:
+      - KEEPER_PORT=8080
+      - KEEPER_DB_PATH=/data/keeper.db
+      - HYDRA_ADMIN_URL=http://hydra:4445
+    networks:
+      - intranet
 
   ui:
     build:
@@ -23,3 +26,71 @@ services:
     depends_on:
       - server # Optional: UI might start before server is fully ready, but this expresses a dependency
     restart: unless-stopped
+    networks:
+      - intranet
+
+  postgresd:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=hydra
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} # Changed from 'secret'
+      - POSTGRES_DB=hydra
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - intranet
+
+  hydra-migrate:
+    image: oryd/hydra:v2.3.0
+    environment:
+      - DSN=postgres://hydra:${POSTGRES_PASSWORD}@postgresd:5432/hydra?sslmode=disable # Changed from 'secret'
+    command: migrate -c /etc/config/hydra/hydra.yml sql -e --yes
+    volumes:
+      - ./config/hydra:/etc/config/hydra
+    restart: on-failure
+    depends_on:
+      - postgresd
+    networks:
+      - intranet
+
+  hydra:
+    image: oryd/hydra:v2.3.0
+    ports:
+      - "4444:4444" # public
+      - "4445:4445" # admin
+    environment:
+      - DSN=postgres://hydra:${POSTGRES_PASSWORD}@postgresd:5432/hydra?sslmode=disable # Changed from 'secret'
+      - URLS_SELF_ISSUER=http://127.0.0.1:4444
+      - URLS_LOGIN=http://127.0.0.1:3000/login
+      - URLS_CONSENT=http://127.0.0.1:3000/consent
+      - SECRETS_SYSTEM=youReallyNeedToChangeThis
+      - LOG_LEVEL=debug
+    command: serve -c /etc/config/hydra/hydra.yml all --dev
+    volumes:
+      - ./config/hydra:/etc/config/hydra
+    restart: unless-stopped
+    depends_on:
+      - hydra-migrate
+    networks:
+      - intranet
+
+  consent:
+    image: oryd/hydra-login-consent-node:v2.3.0
+    ports:
+      - "3000:3000"
+    environment:
+      - HYDRA_ADMIN_URL=http://hydra:4445
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+      - LOG_LEVEL=debug
+    restart: unless-stopped
+    depends_on:
+      - hydra
+    networks:
+      - intranet
+
+volumes:
+  postgres_data:
+
+networks:
+  intranet:
