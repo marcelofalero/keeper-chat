@@ -1,8 +1,6 @@
 package seeder
 
 import (
-	"fmt"
-	// "io/ioutil" // Deprecated, using os.ReadFile instead
 	"log"
 	"os" // For os.ReadFile and os.Stat
 	"path/filepath"

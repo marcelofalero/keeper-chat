@@ -8,11 +8,6 @@ RUN apk add --no-cache gcc musl-dev
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy fixtures directory
-# This needs to be done before the general COPY . . if the fixtures are within the build context's server/ directory
-# and if the path used by the application is relative to the WORKDIR /app
-COPY server/fixtures ./server/fixtures/
-
 # Copy the rest of the source code
 COPY . .
 
@@ -31,8 +26,9 @@ RUN addgroup -S keeper_group -g 1000 && adduser -S -u 1000 -G keeper_group -h /a
 
 # Copy the built binary from the builder stage
 COPY --from=builder /app/keeper .
-# Copy fixtures from the builder stage (ensure they are available in the final image)
-COPY --from=builder /app/server/fixtures ./server/fixtures/
+
+# Copy fixtures directory
+ADD fixtures ./fixtures/
 
 # Create a /data directory for potential database storage, owned by keeper_user
 RUN mkdir -p /data && chown -R keeper_user:keeper_group /data
