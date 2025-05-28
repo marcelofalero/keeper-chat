@@ -98,8 +98,8 @@ func (r *InMemoryMessageRepository) GetRecentMessages(limit int) ([]models.Messa
 	return msgsCopy, nil
 }
 
-// InitSchema is a no-op for the in-memory repository but satisfies the interface.
-func (r *InMemoryMessageRepository) InitSchema() error {
+// Initialize is a no-op for the in-memory repository but satisfies the interface.
+func (r *InMemoryMessageRepository) Initialize() error {
 	// No schema initialization needed for in-memory store.
 	return nil
 }

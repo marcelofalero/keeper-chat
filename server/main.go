@@ -420,8 +420,14 @@ func main() {
 		log.Println("Initializing with in-memory storage adapters.")
 		userRepo = authmemory.NewInMemoryUserRepository()
 		// In-memory repo New functions typically don't return an error for simple map init
-		// but we call InitUserSchema for consistency with the interface, though it's a no-op.
+		// but we call Initialize for consistency with the interface, though it's a no-op.
+		if err = userRepo.Initialize(); err != nil { // Updated call
+			log.Fatalf("Failed to initialize in-memory user repository (no-op should not fail): %v", err) // Updated log
+		}
 		messageRepo = messagingmemory.NewInMemoryMessageRepository()
+		if err = messageRepo.Initialize(); err != nil { // Updated call
+			log.Fatalf("Failed to initialize in-memory message repository (no-op should not fail): %v", err) // Updated log
+		}
 		log.Println("In-memory repositories initialized successfully.")
 	case "sqlite":
 		log.Println("Initializing with SQLite storage adapters.")

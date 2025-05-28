@@ -76,8 +76,8 @@ func (r *InMemoryUserRepository) GetUserByID(id int64) (*models.User, error) {
 	return &userCopy, nil
 }
 
-// InitUserSchema is a no-op for the in-memory repository but satisfies the interface.
-func (r *InMemoryUserRepository) InitUserSchema() error {
+// Initialize is a no-op for the in-memory repository but satisfies the interface.
+func (r *InMemoryUserRepository) Initialize() error {
 	// No schema initialization needed for in-memory store.
 	return nil
 }

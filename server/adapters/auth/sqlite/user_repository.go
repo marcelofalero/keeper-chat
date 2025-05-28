@@ -52,18 +52,18 @@ func NewSQLiteUserRepository(dbPath string) (*SQLiteUserRepository, error) {
 	repo := &SQLiteUserRepository{db: db}
 
 	// Initialize schema
-	log.Printf("User repository: Attempting to initialize user schema for database at: %s", dbPath)
-	if err = repo.InitUserSchema(); err != nil {
+	log.Printf("User repository: Attempting to initialize schema for database at: %s", dbPath) // Updated log
+	if err = repo.Initialize(); err != nil { // Updated call
 		db.Close() // Close DB if schema initialization fails
-		return nil, fmt.Errorf("failed to initialize user schema for DB at %s: %w", dbPath, err)
+		return nil, fmt.Errorf("failed to initialize schema for DB at %s: %w", dbPath, err) // Updated error message
 	}
-	// The InitUserSchema method itself logs success/failure of diagnostics.
+	// The Initialize method itself logs success/failure of diagnostics.
 
 	return repo, nil
 }
 
-// InitUserSchema creates the `users` table if it doesn't already exist.
-func (s *SQLiteUserRepository) InitUserSchema() error {
+// Initialize creates the `users` table if it doesn't already exist.
+func (s *SQLiteUserRepository) Initialize() error {
 	query := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,

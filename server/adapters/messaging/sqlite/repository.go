@@ -53,18 +53,18 @@ func NewSQLiteRepository(dbPath string) (*SQLiteRepository, error) {
 	repo := &SQLiteRepository{db: db}
 
 	// Initialize schema
-	log.Printf("Message repository: Attempting to initialize message schema for database at: %s", dbPath)
-	if err = repo.InitSchema(); err != nil {
+	log.Printf("Message repository: Attempting to initialize schema for database at: %s", dbPath) // Updated log
+	if err = repo.Initialize(); err != nil { // Updated call
 		db.Close() // Close DB if schema initialization fails
-		return nil, fmt.Errorf("failed to initialize message schema for DB at %s: %w", dbPath, err)
+		return nil, fmt.Errorf("failed to initialize schema for DB at %s: %w", dbPath, err) // Updated error message
 	}
-	// The InitSchema method itself logs success/failure of diagnostics.
+	// The Initialize method itself logs success/failure of diagnostics.
 
 	return repo, nil
 }
 
-// InitSchema creates the necessary database schema (tables) if they don't already exist.
-func (s *SQLiteRepository) InitSchema() error {
+// Initialize creates the necessary database schema (tables) if they don't already exist.
+func (s *SQLiteRepository) Initialize() error {
 	query := `
 	CREATE TABLE IF NOT EXISTS messages (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
