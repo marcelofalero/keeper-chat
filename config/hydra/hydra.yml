@@ -1,0 +1,61 @@
+serve:
+  cookies:
+    same_site_mode: Lax # Recommended for most setups
+
+dsn: postgres://hydra:secret@postgresd:5432/hydra?sslmode=disable&max_conns=20&max_idle_conns=4
+
+urls:
+  self:
+    issuer: http://127.0.0.1:4444 # External URL for clients
+  consent: http://127.0.0.1:3000/consent # Points to our consent app
+  login: http://127.0.0.1:3000/login # Points to our consent app's login
+  logout: http://127.0.0.1:3000/logout # Points to our consent app's logout
+  # device flow URLs, can be left as is or updated if device flow is used
+  # verification_ui: http://127.0.0.1:3000/device
+  # post_verification_ui: http://127.0.0.1:3000/device-verified
+
+secrets:
+  system:
+    # IMPORTANT: THESE ARE PLACEHOLDERS AND MUST BE REPLACED WITH STRONG RANDOM VALUES
+    # Generate with: openssl rand -hex 32 (repeat for multiple if needed, but one is usually enough)
+    - "CHANGE_THIS_TO_A_SECURE_RANDOM_STRING_1"
+    - "CHANGE_THIS_TO_A_SECURE_RANDOM_STRING_2"
+  cookie:
+    # IMPORTANT: THIS IS A PLACEHOLDER AND MUST BE REPLACED WITH A STRONG RANDOM VALUE
+    # Generate with: openssl rand -hex 32
+    - "CHANGE_THIS_TO_A_SECURE_RANDOM_COOKIE_SECRET"
+
+
+oidc:
+  subject_identifiers:
+    supported_types:
+      - pairwise
+      - public
+    pairwise:
+      salt: "CHANGE_THIS_TO_A_SECURE_RANDOM_SALT_STRING" # IMPORTANT: Must be changed
+
+# Optional: Enable debug logging if needed, can also be set by env var
+# log:
+#   level: debug
+#   format: text # or json
+
+ttl:
+  access_token: 1h # 1 hour
+  refresh_token: 720h # 30 days
+  id_token: 1h # 1 hour
+  auth_code: 10m # 10 minutes
+  # login_consent_request: 1h # 1 hour
+
+oauth2:
+  expose_internal_errors: true # Useful for debugging, consider false for production
+  pkce:
+    enabled: true # Recommended for public clients
+
+# Setting this to true allows Hydra to work behind a load balancer that terminates TLS
+serve:
+  public:
+    tls:
+      enabled: false # Set to true if you have TLS termination at Hydra itself
+  admin:
+    tls:
+      enabled: false # Set to true if you have TLS termination at Hydra itself
