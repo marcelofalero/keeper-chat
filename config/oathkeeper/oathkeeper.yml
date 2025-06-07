@@ -1,0 +1,95 @@
+version: v0.40.0
+
+serve:
+  proxy:
+    port: 4455
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://127.0.0.1:3000
+  api:
+    port: 4456
+
+access_rules:
+  matching_strategy: glob
+  repositories:
+    - file:///etc/config/oathkeeper/access-rules.json
+
+authenticators:
+  noop:
+    enabled: true
+  anonymous:
+    enabled: true
+    config:
+      subject: guest
+  cookie_session:
+    enabled: true
+    config:
+      check_session_url: http://kratos:4433/sessions/whoami
+      preserve_path: true
+      extra_from: "@this"
+      subject_from: "identity.id"
+      only:
+        - ory_kratos_session
+
+authorizers:
+  allow:
+    enabled: true
+  deny:
+    enabled: true
+  keto_engine_acp_ory:
+    enabled: true
+    config:
+      base_url: http://keto:4466 # Keto Read API
+
+mutators:
+  noop:
+    enabled: true
+  id_token:
+    enabled: true
+    config:
+      issuer_url: http://127.0.0.1:4444 # Hydra URL
+      jwks_url: file:///etc/config/oathkeeper/jwks.json # Path to local JWKS file if not using Hydra's endpoint
+      claims: |
+        {
+          "session": {{ .Session }}
+        }
+  header:
+    enabled: true
+    config:
+      headers:
+        X-User-ID: '{{ .Subject }}'
+        X-Session-ID: '{{ .Extra.sid }}'
+
+errors:
+  fallback:
+    - json
+  handlers:
+    redirect:
+      enabled: true
+      config:
+        to: http://127.0.0.1:3000/login
+        when:
+          - condition:
+              error:
+                - unauthorized
+                - forbidden
+          - condition:
+              error:
+                - session_inactive
+              request:
+                header:
+                  accept:
+                    - text/html
+    json:
+      enabled: true
+      config:
+        verbose: true
+
+log:
+  level: debug
+  format: text
+
+secrets:
+  system:
+    - PLEASE_REPLACE_ME_WITH_A_LONG_AND_RANDOM_STRING_SECURELY_GENERATED
