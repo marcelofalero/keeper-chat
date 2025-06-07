@@ -2,7 +2,10 @@ package sqlite
 
 import (
 	"database/sql"
+	"fmt" // For error wrapping
 	"log"
+	"os"             // Added for os.Stat and os.MkdirAll
+	"path/filepath"  // Added for filepath.Dir
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 	"keeper/server/core/ports"
@@ -18,8 +21,45 @@ type SQLiteUserRepository struct {
 }
 
 // NewSQLiteUserRepository creates a new instance of SQLiteUserRepository.
-func NewSQLiteUserRepository(db *sql.DB) *SQLiteUserRepository {
-	return &SQLiteUserRepository{db: db}
+// It handles database directory creation, connection, and schema initialization.
+func NewSQLiteUserRepository(dbPath string) (*SQLiteUserRepository, error) {
+	// Ensure the database directory exists
+	dbDir := filepath.Dir(dbPath)
+	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
+		log.Printf("User repository: Database directory %s does not exist, creating it.", dbDir)
+		if err = os.MkdirAll(dbDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create user DB directory %s: %w", dbDir, err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to check user DB directory %s: %w", dbDir, err)
+	}
+
+	// Construct DSN and open database connection
+	dbDSN := dbPath + "?_foreign_keys=on"
+	log.Printf("User repository: Opening database connection to: %s (using DSN: %s)", dbPath, dbDSN)
+	db, err := sql.Open("sqlite3", dbDSN)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open user DB at %s: %w", dbPath, err)
+	}
+
+	// Ping the database to verify the connection
+	if err = db.Ping(); err != nil {
+		db.Close() // Close DB if ping fails
+		return nil, fmt.Errorf("failed to ping user DB at %s (DSN: %s): %w", dbPath, dbDSN, err)
+	}
+	log.Printf("User repository: Successfully connected to and pinged database: %s", dbPath)
+
+	repo := &SQLiteUserRepository{db: db}
+
+	// Initialize schema
+	log.Printf("User repository: Attempting to initialize user schema for database at: %s", dbPath)
+	if err = repo.InitUserSchema(); err != nil {
+		db.Close() // Close DB if schema initialization fails
+		return nil, fmt.Errorf("failed to initialize user schema for DB at %s: %w", dbPath, err)
+	}
+	// The InitUserSchema method itself logs success/failure of diagnostics.
+
+	return repo, nil
 }
 
 // InitUserSchema creates the `users` table if it doesn't already exist.
@@ -36,6 +76,7 @@ func (s *SQLiteUserRepository) InitUserSchema() error {
 		return err
 	}
 	log.Println("User schema initialized successfully.")
+	// Removed diagnostic INSERT/DELETE block for users table.
 	return nil
 }
 

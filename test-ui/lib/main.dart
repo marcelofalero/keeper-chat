@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'dart:developer'; // For log()
 import 'package:http/http.dart' as http;
 import 'dart:convert'; // For jsonEncode and jsonDecode
+import 'package:intl/intl.dart'; // For date formatting
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/status.dart' as status;
+
 // Assuming 'test_ui' is the package name in pubspec.yaml
-import 'package:test_ui/src/core/config/api_config.dart'; 
+import 'package:test_ui/src/core/config/api_config.dart';
+import 'package:test_ui/src/models/message.dart'; // Import the Message model
 
 void main() {
   runApp(const MyApp());
@@ -34,7 +39,7 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   bool _isAuthenticated = false; // Manages view state: true for chat, false for login
-  final List<String> _messages = []; // Stores chat messages for display
+  final List<Message> _messages = []; // Stores chat messages for display
   final TextEditingController _messageInputController = TextEditingController();
 
   // Username and password controllers
@@ -43,16 +48,20 @@ class _ChatPageState extends State<ChatPage> {
 
   // Authentication & State variables
   String? _jwtToken;
+  String? _currentUsername; // To store the logged-in user's name
   String? _loginErrorMsg;
   bool _isLoading = false; // To show loading indicator
-  
-  // TODO: Add methods for actual login, registration, message sending/receiving later
+
+  WebSocketChannel? _channel; // WebSocket channel
+
+  // TODO: Add method for actual registration later
 
   @override
   void dispose() {
     _messageInputController.dispose();
-    _usernameController.dispose(); // Dispose username controller
-    _passwordController.dispose(); // Dispose password controller
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _channel?.sink.close(status.goingAway); // Close WebSocket channel
     super.dispose();
   }
 
@@ -189,18 +198,7 @@ class _ChatPageState extends State<ChatPage> {
             itemBuilder: (context, index) {
               // Display messages in reverse order to simulate chat flow
               final message = _messages[_messages.length - 1 - index];
-              // TODO: Differentiate between user's messages and others' messages for styling
-              return Align(
-                // alignment: message.isMine ? Alignment.centerRight : Alignment.centerLeft, // Example
-                alignment: Alignment.centerLeft, // Simple alignment for now
-                child: Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10.0),
-                    child: Text(message), // In a real app, this would be a Message object
-                  ),
-                ),
-              );
+              return _buildMessageItem(message);
             },
           ),
         ),
@@ -228,17 +226,9 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
         ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent), // Optional: Style logout button
-          onPressed: () {
-            setState(() {
-              _isAuthenticated = false;
-              _jwtToken = null; // Clear the token
-              _messages.clear(); 
-              _loginErrorMsg = null; // Also clear any lingering login errors
-            });
-            log("Logout button pressed. Token cleared.");
-          },
-          child: const Text("Logout"), // Removed "placeholder"
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
+          onPressed: _logoutUser, // Call _logoutUser method
+          child: const Text("Logout"),
         ),
         const SizedBox(height: 8),
       ],
@@ -246,25 +236,88 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _sendMessage() {
-    if (_messageInputController.text.trim().isEmpty) {
-      return; // Don't send empty messages
+    if (_messageInputController.text.trim().isEmpty || _currentUsername == null) {
+      return; // Don't send empty messages or if username is not set
     }
     final messageText = _messageInputController.text;
-    // TODO: Send messageText via WebSocket
-    // 1. Construct a message object/JSON
-    // 2. channel.sink.add(jsonEncode(yourMessageObject));
 
-    log("Send button pressed. Message: \"$messageText\" (placeholder)");
+    final newMessage = Message(
+      // id: null, // ID will be set by server, null for client-originated unsent messages
+      user: _currentUsername!,
+      text: messageText,
+      timestamp: DateTime.now(),
+      isMine: true, // Messages sent by the user are always "mine"
+    );
 
-    setState(() {
-      // For now, just add to local list to see it in UI
-      // In a real app, server would echo back the message via WebSocket
-      _messages.add("Me: $messageText"); 
-      if (_messages.length > 10) { // Keep only last 10 messages for this placeholder
-          _messages.removeAt(0);
-      }
-    });
-    _messageInputController.clear();
+    log("Attempting to send message: User='${_currentUsername!}', Text='${messageText}'");
+
+    if (_channel != null) {
+      final messageMap = {
+        'type': 'sendMessage',
+        'payload': {'text': messageText}
+      };
+      _channel!.sink.add(jsonEncode(messageMap));
+      _messageInputController.clear();
+      log('Message sent to WebSocket.');
+    } else {
+      log('Cannot send message: WebSocket channel is not active.');
+      // Optionally show error to user
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Not connected. Cannot send message.')),
+      );
+    }
+  }
+
+  Widget _buildMessageItem(Message message) {
+    final alignment = message.isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final color = message.isMine ? Colors.blue[100] : Colors.grey[300];
+    // final textAlign = message.isMine ? TextAlign.end : TextAlign.start; // Not needed if card aligns children
+    final timeFormat = DateFormat('HH:mm');
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+      child: Column(
+        crossAxisAlignment: alignment,
+        children: <Widget>[
+          Padding( // Add padding around the username
+            padding: const EdgeInsets.only(left: 2.0, right: 2.0, bottom: 2.0), // Small padding
+            child: Text(
+              message.isMine ? 'Me' : message.user,
+              style: const TextStyle(fontSize: 12.0, color: Colors.black54, fontWeight: FontWeight.w500),
+            ),
+          ),
+          Card(
+            color: color,
+            elevation: 1.0, // Softer elevation
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(12.0),
+                topRight: const Radius.circular(12.0),
+                bottomLeft: message.isMine ? const Radius.circular(12.0) : const Radius.circular(0), // Pointy corner for received
+                bottomRight: message.isMine ? const Radius.circular(0) : const Radius.circular(12.0), // Pointy corner for sent
+              )
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, // Text within card always starts left
+                children: [
+                  Text(
+                    message.text,
+                    style: const TextStyle(fontSize: 16.0, color: Colors.black87), // Slightly darker text
+                  ),
+                  const SizedBox(height: 4.0),
+                  Text(
+                    timeFormat.format(message.timestamp.toLocal()), // Display time in local timezone
+                    style: TextStyle(fontSize: 10.0, color: Colors.grey[700]), // Darker grey for time
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loginUser() async {
@@ -288,23 +341,23 @@ class _ChatPageState extends State<ChatPage> {
       final uri = Uri.parse(loginUrl); // loginUrl is from api_config.dart
       log('_loginUser: Parsed URI: ${uri.toString()}');
 
-      final requestBodyMap = <String, String>{
-        'username': _usernameController.text,
-        'password': _passwordController.text,
-      };
-      final requestBodyJson = jsonEncode(requestBodyMap);
-      log('_loginUser: Request body (JSON): $requestBodyJson');
+      // Create Basic Auth credentials
+      final String credentials = '${_usernameController.text}:${_passwordController.text}';
+      final String encodedCredentials = base64Encode(utf8.encode(credentials));
+      log('_loginUser: Basic Auth encoded credentials: $encodedCredentials');
 
-      final requestHeaders = {'Content-Type': 'application/json; charset=UTF-8'};
-      log('_loginUser: Making POST request to ${uri.toString()} with headers: $requestHeaders');
+      final requestHeaders = {
+        'Authorization': 'Basic $encodedCredentials',
+      };
+      log('_loginUser: Making POST request to ${uri.toString()} with Basic Auth header.');
 
       final response = await http.post(
         uri,
         headers: requestHeaders,
-        body: requestBodyJson,
+        // No body for Basic Auth token request as per current server setup
       );
 
-      // log('Login response status: ${response.statusCode}'); // Existing log, can be kept or removed if too verbose
+      // log('Login response status: ${response.statusCode}');
       // log('Login response body: ${response.body}'); // Existing log, can be kept or removed
 
       if (response.statusCode == 200) {
@@ -313,14 +366,14 @@ class _ChatPageState extends State<ChatPage> {
         if (token != null) {
           setState(() {
             _jwtToken = token;
+            _currentUsername = _usernameController.text; // Store username
             _isAuthenticated = true;
             _isLoading = false;
             _loginErrorMsg = null;
-            // Clear text fields after successful login
-            _usernameController.clear();
-            _passwordController.clear();
+            _passwordController.clear(); // Definitely clear password field
           });
-          log('Login successful. Token: $_jwtToken');
+          log('Login successful. Token: $_jwtToken, User: $_currentUsername');
+          _connectWebSocket(); // Connect to WebSocket
         } else {
           setState(() {
             _loginErrorMsg = 'Login successful, but no token received.';
@@ -353,5 +406,103 @@ class _ChatPageState extends State<ChatPage> {
         _isLoading = false;
       });
     }
+  }
+
+  void _connectWebSocket() {
+    if (_jwtToken == null || _currentUsername == null) {
+      log('Error: Cannot connect to WebSocket. Token or username is missing.');
+      return;
+    }
+
+    // Ensure webSocketBaseUrl ends with /ws and doesn't have double slashes if apiBaseUrl already ends with /
+    final wsBase = webSocketBaseUrl.endsWith('/') ? webSocketBaseUrl.substring(0, webSocketBaseUrl.length -1) : webSocketBaseUrl;
+    final wsUrl = Uri.parse('$wsBase?token=$_jwtToken');
+    log('Connecting to WebSocket: $wsUrl');
+
+    _channel = WebSocketChannel.connect(wsUrl);
+
+    _channel!.stream.listen(
+      (message) {
+        log('Received from WebSocket: $message');
+        if (!mounted) return; // Check if the widget is still in the tree
+
+        final decodedMessage = jsonDecode(message);
+        final messageType = decodedMessage['type'] as String?;
+        final payload = decodedMessage['payload'];
+
+        if (_currentUsername == null) {
+          log('Error: _currentUsername is null. Cannot process message.');
+          return;
+        }
+        
+        setState(() {
+          if (messageType == 'newMessage') {
+            final newMessage = Message.fromJson(payload as Map<String, dynamic>, _currentUsername!);
+            _messages.insert(0, newMessage);
+          } else if (messageType == 'history') {
+            if (payload != null && payload['messages'] != null) {
+              final historyMessages = (payload['messages'] as List)
+                  .map((item) => Message.fromJson(item as Map<String, dynamic>, _currentUsername!))
+                  .toList();
+              _messages.insertAll(0, historyMessages);
+               // Sort messages by timestamp after inserting history, oldest first in the list for display
+              _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+            } else {
+               log('Received history message with null payload or messages.');
+            }
+          } else if (messageType == 'error') {
+            if (payload != null && payload['message'] != null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Server error: ${payload['message']}')),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Received an unknown server error.')),
+              );
+            }
+          }
+        });
+      },
+      onError: (error) {
+        log('WebSocket error: $error');
+        if (!mounted) return;
+        setState(() {
+          _channel = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('WebSocket error: $error. Connection lost.')),
+        );
+      },
+      onDone: () {
+        log('WebSocket connection closed');
+        if (!mounted) return;
+        setState(() {
+          _channel = null;
+        });
+        if (_isAuthenticated) { // Only show "connection closed" if user was authenticated (i.e., not on purpose logout)
+            ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('WebSocket connection closed.')),
+          );
+        }
+      },
+      cancelOnError: true, // Important to prevent further processing on error
+    );
+    log('WebSocket listener set up.');
+  }
+
+  void _logoutUser() {
+    log('Logging out user: $_currentUsername');
+    _channel?.sink.close(status.goingAway);
+    setState(() {
+      _channel = null;
+      _isAuthenticated = false;
+      _jwtToken = null;
+      _currentUsername = null;
+      _messages.clear();
+      _loginErrorMsg = null;
+      _usernameController.clear(); // Clear username field on logout
+      _passwordController.clear(); // Clear password field on logout
+    });
+    log('User logged out. UI state reset.');
   }
 }
