@@ -61,6 +61,9 @@ The `Makefile` provides several commands for managing the environment:
 -   **`make help`**:
     Shows a list of available Make commands and their descriptions.
 
+-   **`make pristine`**:
+    Stops all services, removes all volumes, and removes all Docker images used by the services (as defined in `docker-compose.yml`). This is for a complete cleanup of the Docker environment. It does not affect your source files, `.env`, or configuration files in `config/`.
+
 ## Accessing Services
 
 Here are the default ports for accessing the various services:
@@ -106,6 +109,12 @@ To completely reset the environment (e.g., remove all data, containers):
     ```bash
     make down
     ```
+    For a more thorough cleanup that also removes the Docker images used by the services, you can use:
+    ```bash
+    make pristine
+    ```
+    This command is more comprehensive than `make down -v`.
+
 2.  (Optional) If you want to remove the generated secrets and `.env` file to start from scratch:
     ```bash
     rm .env

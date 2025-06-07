@@ -1,4 +1,4 @@
-.PHONY: init up down status
+.PHONY: init up down status pristine help all
 
 init: up ## Initialize and run database migrations
 	@echo "Waiting for PostgreSQL to be healthy..."
@@ -23,6 +23,11 @@ down: ## Stop and remove all services, networks, and volumes
 
 status: ## Display the status of the Docker Compose services
 	docker-compose ps
+
+pristine: ## Stop services, remove volumes, and all images used by services
+	@echo "Stopping services, removing volumes, and removing images used by services..."
+	docker-compose down -v --rmi all
+	@echo "System cleaned to pristine state (excluding .env and config files)."
 
 help: ## Display this help screen
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
