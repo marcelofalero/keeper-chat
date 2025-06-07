@@ -3,7 +3,7 @@ import 'dart:developer'; // For log()
 import 'package:http/http.dart' as http;
 import 'dart:convert'; // For jsonEncode and jsonDecode
 // Assuming 'test_ui' is the package name in pubspec.yaml
-import 'package:test_ui/src/core/config/api_config.dart'; 
+import 'package:test_ui/src/core/config/api_config.dart';
 
 void main() {
   runApp(const MyApp());
@@ -45,7 +45,7 @@ class _ChatPageState extends State<ChatPage> {
   String? _jwtToken;
   String? _loginErrorMsg;
   bool _isLoading = false; // To show loading indicator
-  
+
   // TODO: Add methods for actual login, registration, message sending/receiving later
 
   @override
@@ -233,7 +233,7 @@ class _ChatPageState extends State<ChatPage> {
             setState(() {
               _isAuthenticated = false;
               _jwtToken = null; // Clear the token
-              _messages.clear(); 
+              _messages.clear();
               _loginErrorMsg = null; // Also clear any lingering login errors
             });
             log("Logout button pressed. Token cleared.");
@@ -259,7 +259,7 @@ class _ChatPageState extends State<ChatPage> {
     setState(() {
       // For now, just add to local list to see it in UI
       // In a real app, server would echo back the message via WebSocket
-      _messages.add("Me: $messageText"); 
+      _messages.add("Me: $messageText");
       if (_messages.length > 10) { // Keep only last 10 messages for this placeholder
           _messages.removeAt(0);
       }
