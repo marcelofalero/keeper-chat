@@ -14,8 +14,13 @@ services:
       - KEEPER_PORT=8080
       - KEEPER_DB_PATH=/data/keeper.db
       - HYDRA_ADMIN_URL=http://hydra:4445
+      - OATHKEEPER_PROXY_URL=http://oathkeeper:4455 # Added for server to call Oathkeeper
     networks:
       - intranet
+    depends_on: # Added dependencies
+      - hydra
+      - kratos
+      - oathkeeper
 
   ui:
     build:
@@ -24,7 +29,8 @@ services:
     ports:
       - "8081:80" # Expose Nginx port (serving Flutter web app) to host port 8081
     depends_on:
-      - server # Optional: UI might start before server is fully ready, but this expresses a dependency
+      - server
+      - oathkeeper # UI will likely go through Oathkeeper
     restart: unless-stopped
     networks:
       - intranet
@@ -33,10 +39,18 @@ services:
     image: postgres:16
     environment:
       - POSTGRES_USER=hydra
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} # Changed from 'secret'
-      - POSTGRES_DB=hydra
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=hydra # Default DB for hydra user
+      - KRATOS_DB_NAME=kratos # Env var for init script
+      - KETO_DB_NAME=keto     # Env var for init script
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh # Script to create databases and users
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - intranet
@@ -50,7 +64,8 @@ services:
       - ./config/hydra:/etc/config/hydra
     restart: on-failure
     depends_on:
-      - postgresd
+      postgresd:
+        condition: service_healthy # Wait for postgres to be healthy
     networks:
       - intranet
 
@@ -60,12 +75,14 @@ services:
       - "4444:4444" # public
       - "4445:4445" # admin
     environment:
-      - DSN=postgres://hydra:${POSTGRES_PASSWORD}@postgresd:5432/hydra?sslmode=disable # Changed from 'secret'
+      - DSN=postgres://hydra:${POSTGRES_PASSWORD}@postgresd:5432/hydra?sslmode=disable
       - URLS_SELF_ISSUER=http://127.0.0.1:4444
-      - URLS_LOGIN=http://127.0.0.1:3000/login
-      - URLS_CONSENT=http://127.0.0.1:3000/consent
-      - SECRETS_SYSTEM=youReallyNeedToChangeThis
+      - URLS_LOGIN=http://127.0.0.1:3000/login # Should point to consent app or your UI
+      - URLS_CONSENT=http://127.0.0.1:3000/consent # Should point to consent app or your UI
+      - SECRETS_SYSTEM=${HYDRA_SECRETS_SYSTEM:-youReallyNeedToChangeThis} # Use env var or default
       - LOG_LEVEL=debug
+      - OIDC_SUBJECT_IDENTIFIERS_SUPPORTED_TYPES=public,pairwise
+      - OIDC_SUBJECT_IDENTIFIERS_PAIRWISE_SALT=${HYDRA_PAIRWISE_SALT:-youReallyNeedToChangeThisToo} # Use env var or default
     command: serve -c /etc/config/hydra/hydra.yml all --dev
     volumes:
       - ./config/hydra:/etc/config/hydra
@@ -83,9 +100,113 @@ services:
       - HYDRA_ADMIN_URL=http://hydra:4445
       - NODE_TLS_REJECT_UNAUTHORIZED=0
       - LOG_LEVEL=debug
+      # The consent app needs to know about Kratos for self-service flows
+      - KRATOS_PUBLIC_URL=http://kratos:4433
     restart: unless-stopped
     depends_on:
       - hydra
+      - kratos # For linking to Kratos flows
+    networks:
+      - intranet
+
+  kratos-migrate:
+    image: oryd/kratos:latest
+    environment:
+      - DSN=postgres://kratos:${POSTGRES_PASSWORD}@postgresd:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+    command: migrate sql -e --yes
+    volumes:
+      - ./config/kratos:/etc/config/kratos
+    restart: on-failure
+    depends_on:
+      postgresd:
+        condition: service_healthy # Wait for postgres to be healthy
+    networks:
+      - intranet
+
+  kratos:
+    image: oryd/kratos:latest # Use a specific version in production, e.g. v0.13.0
+    ports:
+      - "4433:4433" # public
+      - "4434:4434" # admin
+    environment:
+      - DSN=postgres://kratos:${POSTGRES_PASSWORD}@postgresd:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+      - LOG_LEVEL=debug
+      # KRATOS_SCHEMAS_DEFAULT_URL is set via kratos.yml
+      # KRATOS_BROWSER_DEFAULT_RETURN_URL is set via kratos.yml
+      # KRATOS_PUBLIC_BASE_URL is set via kratos.yml
+      # KRATOS_ADMIN_BASE_URL is set via kratos.yml
+      # Self-service UI URLs are set via kratos.yml
+      # KRATOS_COURIER_SMTP_CONNECTION_URI is set via kratos.yml
+      - KRATOS_SECRETS_COOKIE=${KRATOS_SECRETS_COOKIE:-youReallyNeedToChangeThis}
+      - KRATOS_SECRETS_CIPHER=${KRATOS_SECRETS_CIPHER:-youReallyNeedToChangeThisToo}
+      # Example of how to set schema URL if not using the one in kratos.yml
+      # - KRATOS_SCHEMAS_0_URL=file:///etc/config/kratos/identity.schema.json
+    command: serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
+    volumes:
+      - ./config/kratos:/etc/config/kratos
+    restart: unless-stopped
+    depends_on:
+      - kratos-migrate
+    networks:
+      - intranet
+
+  keto-migrate:
+    image: oryd/keto:latest # Use a specific version in production
+    environment:
+      - DSN=postgres://keto:${POSTGRES_PASSWORD}@postgresd:5432/keto?sslmode=disable&max_conns=20&max_idle_conns=4
+    command: migrate up -y
+    volumes:
+      - ./config/keto:/etc/config/keto # Mount keto.yml
+    restart: on-failure
+    depends_on:
+      postgresd:
+        condition: service_healthy # Wait for postgres to be healthy
+    networks:
+      - intranet
+
+  keto:
+    image: oryd/keto:latest # Use a specific version in production
+    ports:
+      - "4466:4466" # read
+      - "4467:4467" # write
+    environment:
+      - DSN=postgres://keto:${POSTGRES_PASSWORD}@postgresd:5432/keto?sslmode=disable&max_conns=20&max_idle_conns=4
+      - LOG_LEVEL=debug
+      # Namespaces can be configured via keto.yml or env vars like KETO_NAMESPACES_0_ID, KETO_NAMESPACES_0_PATH etc.
+    command: serve -c /etc/config/keto/keto.yml # Reference the mounted keto.yml
+    volumes:
+      - ./config/keto:/etc/config/keto
+    restart: unless-stopped
+    depends_on:
+      - keto-migrate
+    networks:
+      - intranet
+
+  oathkeeper:
+    image: oryd/oathkeeper:latest # Use a specific version in production
+    ports:
+      - "4455:4455" # proxy
+      - "4456:4456" # api
+    environment:
+      - LOG_LEVEL=debug
+      # OATHKEEPER_CONFIG_FILE is deprecated, use command line arg -c or OATHKEEPER_CONFIG_PATH
+      # All config is now driven from oathkeeper.yml by default if mounted
+    command: serve -c /etc/config/oathkeeper/oathkeeper.yml
+    volumes:
+      - ./config/oathkeeper:/etc/config/oathkeeper
+    restart: unless-stopped
+    depends_on:
+      - kratos # Oathkeeper uses Kratos for session checking
+      - keto   # Oathkeeper uses Keto for authorization
+    networks:
+      - intranet
+
+  mailslurper:
+    image: oryd/mailslurper:latest-smtps
+    ports:
+      - "4000:4436" # Web UI
+      - "1025:1025" # SMTP
+      - "4001:4437" # Admin API (optional, if you need to access it from host)
     networks:
       - intranet
 
