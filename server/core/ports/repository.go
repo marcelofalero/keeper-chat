@@ -4,7 +4,6 @@ import "keeper/server/models"
 
 // MessageRepository defines the interface for message persistence.
 type MessageRepository interface {
-	SaveMessage(msg models.Message) (models.Message, error) // Adjusted to return the saved message
+	SaveMessage(msg models.Message) error
 	GetMessages() ([]models.Message, error)
-	GetRecentMessages(limit int) ([]models.Message, error)
 }

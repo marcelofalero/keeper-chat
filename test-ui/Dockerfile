@@ -13,7 +13,6 @@ COPY pubspec.* ./
 # The worker created a pubspec.yaml, let's assume `flutter pub get` handles it.
 
 # Get Flutter dependencies
-RUN rm -f pubspec.lock
 RUN flutter pub get
 
 # Copy the rest of the application source code

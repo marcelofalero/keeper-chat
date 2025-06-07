@@ -13,8 +13,6 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.2
   http: ^1.2.1 # Added for HTTP requests
-  web_socket_channel: ^2.4.0 # Added for WebSocket communication
-  intl: ^0.18.1 # Added for date formatting
 
 dev_dependencies:
   flutter_test:

@@ -75,9 +75,9 @@ session:
 
 secrets:
   cookie:
-    - "PLEASE_REPLACE_THIS_WITH_A_RANDOM_SECRET_COOKIE_KRATOS"
-  csrf_token:
-    - "PLEASE_REPLACE_THIS_WITH_A_RANDOM_SECRET_CSRF_KRATOS"
+    - "KRATOS_COOKIE_SECRET_PLACEHOLDER"
+  cipher:
+    - "KRATOS_CIPHER_SECRET_PLACEHOLDER"
 
 log:
   level: debug
@@ -197,8 +197,8 @@ def main():
         "hydra_salt_secret_val": generate_hex_secret(32),
     }
     kratos_secrets_values = {
-        "kratos_cookie_secret_val": generate_hex_secret(32),
-        "kratos_csrf_secret_val": generate_hex_secret(32),
+        "kratos_cookie_secret_val": generate_hex_secret(32),  # 64 chars
+        "kratos_cipher_secret_val": generate_hex_secret(16),  # 32 chars
     }
     postgres_password = generate_hex_secret(16)
 
@@ -210,8 +210,8 @@ def main():
     ]
 
     kratos_replacements = [
-        ("cookie", "PLEASE_REPLACE_THIS_WITH_A_RANDOM_SECRET_COOKIE_KRATOS", "kratos_cookie_secret_val"),
-        ("csrf_token", "PLEASE_REPLACE_THIS_WITH_A_RANDOM_SECRET_CSRF_KRATOS", "kratos_csrf_secret_val"),
+        ("cookie", "KRATOS_COOKIE_SECRET_PLACEHOLDER", "kratos_cookie_secret_val"),
+        ("cipher", "KRATOS_CIPHER_SECRET_PLACEHOLDER", "kratos_cipher_secret_val"),
     ]
 
     for path in [HYDRA_CONFIG_PATH, KRATOS_CONFIG_PATH]:
