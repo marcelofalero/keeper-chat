@@ -79,19 +79,45 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
   \$do\$;
 EOSQL
 
-# Grant privileges to the new users for their respective databases
+# Alter database ownership to the newly created users
 if [ -n "$KRATOS_DB_NAME" ]; then
-  echo "  Granting privileges on database '$KRATOS_DB_NAME' to user 'kratos'..."
-  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
-    GRANT ALL PRIVILEGES ON DATABASE $KRATOS_DB_NAME TO kratos;
-EOSQL
+  # Ensure database exists before trying to change its owner
+  if psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -lqt | cut -d \| -f 1 | grep -qw "$KRATOS_DB_NAME"; then
+    echo "  Altering ownership of database '$KRATOS_DB_NAME' to user 'kratos'..."
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -c "ALTER DATABASE \"$KRATOS_DB_NAME\" OWNER TO kratos;"
+  else
+    echo "  Database '$KRATOS_DB_NAME' does not exist. Skipping ownership alteration."
+  fi
 fi
 
 if [ -n "$KETO_DB_NAME" ]; then
-  echo "  Granting privileges on database '$KETO_DB_NAME' to user 'keto'..."
-  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
-    GRANT ALL PRIVILEGES ON DATABASE $KETO_DB_NAME TO keto;
+  # Ensure database exists before trying to change its owner
+  if psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -lqt | cut -d \| -f 1 | grep -qw "$KETO_DB_NAME"; then
+    echo "  Altering ownership of database '$KETO_DB_NAME' to user 'keto'..."
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -c "ALTER DATABASE \"$KETO_DB_NAME\" OWNER TO keto;"
+  else
+    echo "  Database '$KETO_DB_NAME' does not exist. Skipping ownership alteration."
+  fi
+fi
+
+# Grant privileges to the new users for their respective databases
+# Although ownership might imply full privileges for the owner, explicit grant is safer for clarity.
+if [ -n "$KRATOS_DB_NAME" ]; then
+  if psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -lqt | cut -d \| -f 1 | grep -qw "$KRATOS_DB_NAME"; then
+    echo "  Granting privileges on database '$KRATOS_DB_NAME' to user 'kratos'..."
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+      GRANT ALL PRIVILEGES ON DATABASE "$KRATOS_DB_NAME" TO kratos;
 EOSQL
+  fi
+fi
+
+if [ -n "$KETO_DB_NAME" ]; then
+  if psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -lqt | cut -d \| -f 1 | grep -qw "$KETO_DB_NAME"; then
+    echo "  Granting privileges on database '$KETO_DB_NAME' to user 'keto'..."
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+      GRANT ALL PRIVILEGES ON DATABASE "$KETO_DB_NAME" TO keto;
+EOSQL
+  fi
 fi
 
 echo "Database initialization script completed."
