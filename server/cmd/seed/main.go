@@ -6,9 +6,8 @@ import (
 	"os"
 	"path/filepath" // For path manipulation
 
-	"golang.org/x/crypto/bcrypt" // For password hashing
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
-
+	"golang.org/x/crypto/bcrypt"    // For password hashing
 	// Assuming models are directly accessible if this cmd is within the server module context
 	// For simplicity, we'll define simplified User and Message structs here,
 	// or adjust import paths if running `go run` from server root makes `keeper/server/models` accessible.
@@ -31,12 +30,11 @@ type SeedUser struct {
 // Simplified Message struct for seeding - ideally use models.Message
 type SeedMessage struct {
 	ID        int64
-	UserID    int64 // Assuming we link messages to user IDs
+	UserID    int64  // Assuming we link messages to user IDs
 	User      string // Username, denormalized for simplicity in this example
 	Text      string
 	Timestamp string // Use string for simplicity, format "YYYY-MM-DD HH:MM:SS"
 }
-
 
 func main() {
 	log.Println("Seeding database...")
@@ -49,7 +47,6 @@ func main() {
 			log.Fatalf("Error creating data directory %s: %v", dataDir, err)
 		}
 	}
-
 
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
@@ -123,7 +120,7 @@ func main() {
 		log.Printf("Seeded user: %s (ID: %d)", u.username, id)
 		seededUsers = append(seededUsers, SeedUser{ID: id, Username: u.username, PasswordHash: string(hashedPassword)})
 	}
-	
+
 	if len(seededUsers) < 2 {
 		log.Println("Not enough users were successfully seeded/found to create messages.")
 		log.Println("Seeding complete.")
@@ -137,11 +134,10 @@ func main() {
 		{User: seededUsers[0].Username, Text: "I'm good, thanks! Planning any TTRPG sessions?", Timestamp: "2023-01-01 10:02:00"},
 		{User: seededUsers[1].Username, Text: "Yes! This weekend. You in?", Timestamp: "2023-01-01 10:03:00"},
 	}
-    if len(seededUsers) > 2 { // Add messages from Charlie if available
-        messagesToSeed = append(messagesToSeed, SeedMessage{User: seededUsers[2].Username, Text: "Hey everyone, what's up?", Timestamp: "2023-01-01 10:00:30"})
-        messagesToSeed = append(messagesToSeed, SeedMessage{User: seededUsers[0].Username, Text: "Hey Charlie! Just chatting.", Timestamp: "2023-01-01 10:01:30"})
-    }
-
+	if len(seededUsers) > 2 { // Add messages from Charlie if available
+		messagesToSeed = append(messagesToSeed, SeedMessage{User: seededUsers[2].Username, Text: "Hey everyone, what's up?", Timestamp: "2023-01-01 10:00:30"})
+		messagesToSeed = append(messagesToSeed, SeedMessage{User: seededUsers[0].Username, Text: "Hey Charlie! Just chatting.", Timestamp: "2023-01-01 10:01:30"})
+	}
 
 	for _, m := range messagesToSeed {
 		// Basic check to avoid duplicate messages based on text and user (very simplistic)
