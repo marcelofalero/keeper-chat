@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hydra-service
+spec:
+  type: ClusterIP # Default, but explicit for clarity
+  selector:
+    app: hydra
+  ports:
+    - name: http-public
+      protocol: TCP
+      port: 4444 # Port the service will listen on
+      targetPort: 4444 # Port on the pod Hydra is listening on
+    - name: http-admin
+      protocol: TCP
+      port: 4445 # Port the service will listen on
+      targetPort: 4445 # Port on the pod Hydra is listening on

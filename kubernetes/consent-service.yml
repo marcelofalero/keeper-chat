@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: consent-service
+spec:
+  type: ClusterIP # As per plan, can be changed to NodePort if direct external access is needed
+  selector:
+    app: consent
+  ports:
+    - name: http
+      protocol: TCP
+      port: 3000 # Port the service will listen on
+      targetPort: http # Matches 'name' in containerPort of the deployment

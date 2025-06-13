@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oathkeeper-config
+data:
+  oathkeeper.yml: |
+    version: v0.40.0
+
+    serve:
+      proxy:
+        port: 4455
+        cors:
+          enabled: true
+          allowed_origins:
+            - http://127.0.0.1:3000 # Adjust to your frontend URL
+      api:
+        port: 4456
+
+    access_rules:
+      matching_strategy: glob
+      repositories:
+        - file:///etc/config/oathkeeper/access-rules.json
+
+    authenticators:
+      noop:
+        enabled: true
+      anonymous:
+        enabled: true
+        config:
+          subject: guest
+      cookie_session:
+        enabled: true
+        config:
+          check_session_url: http://kratos-service:4433/sessions/whoami # Changed to k8s service name
+          preserve_path: true
+          extra_from: "@this"
+          subject_from: "identity.id"
+          only:
+            - ory_kratos_session
+
+    authorizers:
+      allow:
+        enabled: true
+      deny:
+        enabled: true
+      keto_engine_acp_ory:
+        enabled: true
+        config:
+          base_url: http://keto-service:4466 # Changed to k8s service name
+
+    mutators:
+      noop:
+        enabled: true
+      id_token:
+        enabled: true
+        config:
+          issuer_url: http://hydra-service:4444 # Changed to k8s service name
+          jwks_url: file:///etc/config/oathkeeper/jwks.json # Path to local JWKS file
+          claims: |
+            {
+              "session": {{ .Session }}
+            }
+      header:
+        enabled: true
+        config:
+          headers:
+            X-User-ID: '{{ .Subject }}'
+            X-Session-ID: '{{ .Extra.sid }}'
+
+    errors:
+      fallback:
+        - json
+      handlers:
+        redirect:
+          enabled: true
+          config:
+            to: http://127.0.0.1:3000/login # Adjust to your frontend URL
+            when:
+              - condition:
+                  error:
+                    - unauthorized
+                    - forbidden
+              - condition:
+                  error:
+                    - session_inactive
+                  request:
+                    header:
+                      accept:
+                        - text/html
+        json:
+          enabled: true
+          config:
+            verbose: true
+
+    # Log level will be set by environment variable in the Oathkeeper deployment
+    # log:
+    #   level: debug
+    #   format: text
+
+    # System secrets should be managed securely, e.g., via environment variables or K8s secrets
+    # secrets:
+    #   system:
+    #     - PLEASE_REPLACE_ME_WITH_A_LONG_AND_RANDOM_STRING_SECURELY_GENERATED
+
+  access-rules.json: |
+    [
+      {
+        "id": "allow-all",
+        "match": {
+          "url": "<.*>",
+          "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+        },
+        "authenticators": [{ "handler": "noop" }],
+        "authorizer": { "handler": "allow" },
+        "mutators": [{ "handler": "noop" }]
+      }
+    ]
+
+  jwks.json: |
+    {
+      "keys": []
+    }

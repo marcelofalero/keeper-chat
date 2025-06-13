@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ui
+  template:
+    metadata:
+      labels:
+        app: ui
+    spec:
+      containers:
+        - name: ui
+          image: keeper-ui:latest # Assumes image is available in Minikube's Docker daemon
+          imagePullPolicy: IfNotPresent # Important for local images
+          ports:
+            - name: http
+              containerPort: 80 # Default Nginx port inside the container
+          readinessProbe:
+            httpGet:
+              path: / # Check if Nginx serves the root path
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          # No specific environment variables typically needed for a static Nginx site,
+          # unless the Nginx config within the image is parameterized.
+          # The Flutter UI (test-ui) Dockerfile likely builds and serves static files via Nginx.
+          # The default port for Nginx is 80.
+          pass;

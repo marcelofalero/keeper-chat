@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keto-migrate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keto-migrate
+  template:
+    metadata:
+      labels:
+        app: keto-migrate
+    spec:
+      containers:
+        - name: keto-migrate
+          image: oryd/keto:latest # Using 'latest' as specified
+          command:
+            - "keto"
+            - "migrate"
+            - "up"
+            - "-c"
+            - "/etc/config/keto/keto.yml"
+            - "-y" # Corresponds to --yes
+          env:
+            # Construct DSN using the 'keto' user, password from 'postgres-secrets',
+            # and 'keto' database on 'postgres-service'.
+            - name: DSN
+              value: "postgres://keto:$(POSTGRES_PASSWORD)@postgres-service:5432/keto?sslmode=disable&max_conns=20&max_idle_conns=4"
+          # This envFrom makes POSTGRES_PASSWORD from postgres-secrets available for DSN construction.
+          envFrom:
+            - secretRef:
+                name: postgres-secrets # Source POSTGRES_PASSWORD from here
+          volumeMounts:
+            - name: keto-config-volume
+              mountPath: /etc/config/keto
+      restartPolicy: OnFailure
+      volumes:
+        - name: keto-config-volume
+          configMap:
+            name: keto-config # Name of the ConfigMap for keto.yml
+            items:
+              - key: keto.yml
+                path: keto.yml

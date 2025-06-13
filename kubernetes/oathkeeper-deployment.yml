@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oathkeeper-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oathkeeper
+  template:
+    metadata:
+      labels:
+        app: oathkeeper
+    spec:
+      containers:
+        - name: oathkeeper
+          image: oryd/oathkeeper:latest # Using 'latest' as specified
+          command:
+            - "oathkeeper"
+            - "serve"
+            - "-c"
+            - "/etc/config/oathkeeper/oathkeeper.yml"
+          ports:
+            - name: proxy
+              containerPort: 4455
+            - name: api
+              containerPort: 4456
+          env:
+            - name: LOG_LEVEL
+              value: "debug"
+            # It's good practice to set system secrets via environment variables.
+            # Example:
+            # - name: SECRETS_SYSTEM
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: oathkeeper-secrets # Assuming a secret object for this
+            #       key: OATHKEEPER_SECRETS_SYSTEM
+            # For now, as per subtask, only LOG_LEVEL is explicitly set.
+            # Oathkeeper might use default internal secrets or might require SECRETS_SYSTEM.
+            # If it fails to start due to missing system secrets, this would be the place to add it.
+          volumeMounts:
+            - name: oathkeeper-config-volume
+              mountPath: /etc/config/oathkeeper
+          readinessProbe:
+            httpGet:
+              path: /health/ready # Oathkeeper's health endpoint
+              port: api # Check on api port
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/alive # Oathkeeper's health endpoint
+              port: api # Check on api port
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: oathkeeper-config-volume
+          configMap:
+            name: oathkeeper-config # Name of the ConfigMap
+            items:
+              - key: oathkeeper.yml
+                path: oathkeeper.yml
+              - key: access-rules.json
+                path: access-rules.json
+              - key: jwks.json
+                path: jwks.json

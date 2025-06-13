@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keto-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keto
+  template:
+    metadata:
+      labels:
+        app: keto
+    spec:
+      containers:
+        - name: keto
+          image: oryd/keto:latest # Using 'latest' as specified
+          command:
+            - "keto"
+            - "serve"
+            - "-c"
+            - "/etc/config/keto/keto.yml"
+          ports:
+            - name: read
+              containerPort: 4466
+            - name: write
+              containerPort: 4467
+          env:
+            - name: DSN
+              value: "postgres://keto:$(POSTGRES_PASSWORD)@postgres-service:5432/keto?sslmode=disable&max_conns=20&max_idle_conns=4"
+            - name: LOG_LEVEL
+              value: "debug"
+            # This envFrom makes POSTGRES_PASSWORD from postgres-secrets available for DSN construction.
+          envFrom:
+            - secretRef:
+                name: postgres-secrets # Source POSTGRES_PASSWORD from here
+          volumeMounts:
+            - name: keto-config-volume
+              mountPath: /etc/config/keto
+          readinessProbe:
+            httpGet:
+              path: /health/ready # Keto's health endpoint is typically /health/ready
+              port: read # Check on read port
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/alive # Keto's health endpoint is typically /health/alive
+              port: read # Check on read port
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: keto-config-volume
+          configMap:
+            name: keto-config # Name of the ConfigMap for keto.yml
+            items:
+              - key: keto.yml
+                path: keto.yml

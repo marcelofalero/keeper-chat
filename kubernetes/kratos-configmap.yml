@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kratos-config
+data:
+  kratos.yml: |
+    version: v0.13.0
+
+    # DSN will be configured via environment variable in the Kratos deployments
+    # dsn: postgres://kratos:${POSTGRES_PASSWORD}@postgresd:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+
+    serve:
+      public:
+        base_url: http://127.0.0.1:4433/ # May need adjustment for in-cluster vs external access
+        port: 4433
+        cors:
+          enabled: true
+          allowed_origins:
+            - http://127.0.0.1:8081 # Example, adjust to your Flutter UI or other clients
+            - http://localhost:8081
+      admin:
+        base_url: http://kratos-service:4434/ # Using K8s service name for admin
+        port: 4434
+
+    selfservice:
+      default_browser_return_url: http://127.0.0.1:8081/ # Adjust to your client
+      allowed_return_urls:
+        - http://127.0.0.1:8081 # Adjust to your client
+
+      flows:
+        error:
+          ui_url: http://127.0.0.1:8081/error
+        settings:
+          ui_url: http://127.0.0.1:8081/settings
+          privileged_session_max_age: 15m
+        recovery:
+          enabled: true
+          ui_url: http://127.0.0.1:8081/recovery
+        verification:
+          enabled: true
+          ui_url: http://127.0.0.1:8081/verification
+          after:
+            default_browser_return_url: http://127.0.0.1:8081/
+        logout:
+          after:
+            default_browser_return_url: http://127.0.0.1:8081/login
+        login:
+          ui_url: http://127.0.0.1:8081/login
+          lifespan: 12h
+        registration:
+          lifespan: 12h
+          ui_url: http://127.0.0.1:8081/registration
+          after:
+            default_browser_return_url: http://127.0.0.1:8081/
+
+    # Log level will be set by environment variable in the Kratos deployment
+    # log:
+    #   level: debug
+    #   format: text
+
+    # Secrets will be managed by Kubernetes Secrets and passed as environment variables
+    # secrets:
+    #   cookie:
+    #     - KRATOS_COOKIE_SECRET_PLACEHOLDER
+    #   cipher:
+    #     - KRATOS_CIPHER_SECRET_PLACEHOLDER
+
+    courier:
+      # This needs to be resolvable in K8s. If mailslurper is also deployed, use its service name.
+      # For now, placeholder or assume it's external or will be configured for K8s.
+      smtp:
+        connection_uri: smtps://test:test@mailslurper.default.svc.cluster.local:1025/?skip_ssl_verify=true # Example K8s service name
+
+    identity:
+      default_schema_id: default
+      schemas:
+        - id: default
+          # This path will be valid inside the container where the ConfigMap is mounted
+          url: file:///etc/config/kratos/identity.schema.json
+
+  identity.schema.json: |
+    {
+      "$id": "https://schemas.ory.sh/presets/kratos/identity.schema.json",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Person",
+      "type": "object",
+      "properties": {
+        "traits": {
+          "type": "object",
+          "properties": {
+            "email": {
+              "type": "string",
+              "format": "email",
+              "title": "E-Mail",
+              "ory.sh/kratos": {
+                "credentials": {
+                  "password": {
+                    "identifier": true
+                  }
+                },
+                "recovery": {
+                  "via": "email"
+                },
+                "verification": {
+                  "via": "email"
+                }
+              }
+            },
+            "name": {
+              "type": "object",
+              "properties": {
+                "first": {
+                  "title": "First Name",
+                  "type": "string"
+                },
+                "last": {
+                  "title": "Last Name",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "email"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }

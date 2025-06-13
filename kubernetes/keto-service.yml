@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: keto-service
+spec:
+  type: ClusterIP # Default, but explicit for clarity
+  selector:
+    app: keto
+  ports:
+    - name: http-read
+      protocol: TCP
+      port: 4466     # Port the service will listen on for read operations
+      targetPort: read # Matches 'name' in containerPort for read
+    - name: http-write
+      protocol: TCP
+      port: 4467    # Port the service will listen on for write operations
+      targetPort: write # Matches 'name' in containerPort for write

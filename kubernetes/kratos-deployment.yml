@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kratos-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kratos
+  template:
+    metadata:
+      labels:
+        app: kratos
+    spec:
+      containers:
+        - name: kratos
+          image: oryd/kratos:latest # Using 'latest' as specified
+          command:
+            - "kratos"
+            - "serve"
+            - "-c"
+            - "/etc/config/kratos/kratos.yml"
+            - "--dev"
+            - "--watch-courier"
+          ports:
+            - name: public
+              containerPort: 4433
+            - name: admin
+              containerPort: 4434
+          env:
+            - name: DSN
+              value: "postgres://kratos:$(POSTGRES_PASSWORD)@postgres-service:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4"
+            - name: LOG_LEVEL
+              value: "debug"
+            - name: KRATOS_SECRETS_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: kratos-secrets
+                  key: KRATOS_SECRETS_COOKIE
+            - name: KRATOS_SECRETS_CIPHER
+              valueFrom:
+                secretKeyRef:
+                  name: kratos-secrets
+                  key: KRATOS_SECRETS_CIPHER
+            # This envFrom makes POSTGRES_PASSWORD from postgres-secrets available for DSN construction.
+          envFrom:
+            - secretRef:
+                name: postgres-secrets # Source POSTGRES_PASSWORD from here
+          volumeMounts:
+            - name: kratos-config-volume
+              mountPath: /etc/config/kratos
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: admin # Check on admin port
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/alive
+              port: admin # Check on admin port
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: kratos-config-volume
+          configMap:
+            name: kratos-config # Name of the ConfigMap for kratos.yml and identity.schema.json
+            items:
+              - key: kratos.yml
+                path: kratos.yml
+              - key: identity.schema.json
+                path: identity.schema.json

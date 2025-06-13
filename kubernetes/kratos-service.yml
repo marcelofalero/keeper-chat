@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kratos-service
+spec:
+  type: ClusterIP # Default, but explicit for clarity
+  selector:
+    app: kratos
+  ports:
+    - name: http-public
+      protocol: TCP
+      port: 4433       # Port the service will listen on
+      targetPort: public # Matches 'name' in containerPort for public
+    - name: http-admin
+      protocol: TCP
+      port: 4434      # Port the service will listen on
+      targetPort: admin  # Matches 'name' in containerPort for admin

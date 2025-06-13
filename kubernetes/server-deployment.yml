@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: server
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      containers:
+        - name: server
+          image: keeper-server:latest # Assumes image is available in Minikube's Docker daemon
+          imagePullPolicy: IfNotPresent # Important for local images like with Minikube
+          ports:
+            - name: http
+              containerPort: 8080 # KEEPER_PORT
+          env:
+            - name: KEEPER_PORT
+              value: "8080"
+            - name: KEEPER_DB_PATH
+              value: "/data/keeper.db"
+            - name: HYDRA_ADMIN_URL
+              value: "http://hydra-service:4445"
+            - name: OATHKEEPER_PROXY_URL # Corrected: Oathkeeper proxy URL for backend checks
+              value: "http://oathkeeper-service:4455"
+          volumeMounts:
+            - name: data-volume
+              mountPath: /data # Mount path for keeper.db
+          readinessProbe:
+            httpGet:
+              path: /health # Assuming a /health endpoint for the server
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+      volumes:
+        - name: data-volume
+          emptyDir: {} # Using emptyDir for /data as discussed
