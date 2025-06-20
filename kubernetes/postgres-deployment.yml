@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: hydra
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets # This secret will be created later
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: hydra
+            - name: KRATOS_DB_NAME
+              value: kratos
+            - name: KETO_DB_NAME
+              value: keto
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+            - name: init-db-script
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - hydra
+                - -d
+                - hydra
+                - -q
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - hydra
+                - -d
+                - hydra
+                - -q
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        - name: init-db-script
+          configMap:
+            name: init-db-configmap
+            items:
+              - key: init-db.sh
+                path: init-db.sh
+                mode: 0755 # Make the script executable

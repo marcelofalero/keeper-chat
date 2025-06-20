@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hydra-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hydra
+  template:
+    metadata:
+      labels:
+        app: hydra
+    spec:
+      containers:
+        - name: hydra
+          image: oryd/hydra:v2.3.0
+          command:
+            - "hydra"
+            - "serve"
+            - "-c"
+            - "/etc/config/hydra/hydra.yml"
+            - "all"
+            - "--dev"
+          ports:
+            - containerPort: 4444 # Public port
+            - containerPort: 4445 # Admin port
+          env:
+            - name: DSN # Similar DSN construction as in hydra-migrate
+              value: "postgres://hydra:$(POSTGRES_PASSWORD)@postgres-service:5432/hydra?sslmode=disable"
+            - name: URLS_SELF_ISSUER
+              value: "http://127.0.0.1:4444" # As per subtask, may need adjustment for in-cluster vs external
+            - name: URLS_LOGIN
+              value: "http://127.0.0.1:3000/login"
+            - name: URLS_CONSENT
+              value: "http://127.0.0.1:3000/consent"
+            - name: SECRETS_SYSTEM
+              valueFrom:
+                secretKeyRef:
+                  name: hydra-secrets
+                  key: HYDRA_SECRETS_SYSTEM
+            - name: LOG_LEVEL
+              value: "debug"
+            - name: OIDC_SUBJECT_IDENTIFIERS_SUPPORTED_TYPES
+              value: "public,pairwise"
+            - name: OIDC_SUBJECT_IDENTIFIERS_PAIRWISE_SALT
+              valueFrom:
+                secretKeyRef:
+                  name: hydra-secrets
+                  key: HYDRA_PAIRWISE_SALT
+          envFrom: # Make POSTGRES_PASSWORD from postgres-secrets available for DSN construction
+            - secretRef:
+                name: postgres-secrets
+            # Other secrets like HYDRA_SECRETS_SYSTEM are sourced via valueFrom directly from hydra-secrets
+          volumeMounts:
+            - name: hydra-config-volume
+              mountPath: /etc/config/hydra
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 4444 # Public port
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/alive
+              port: 4444 # Public port
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: hydra-config-volume
+          configMap:
+            name: hydra-config
+            items:
+              - key: hydra.yml
+                path: hydra.yml

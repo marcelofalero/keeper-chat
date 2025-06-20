@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: oathkeeper-service
+spec:
+  type: ClusterIP # Default, but explicit for clarity
+  selector:
+    app: oathkeeper
+  ports:
+    - name: http-proxy
+      protocol: TCP
+      port: 4455       # Port the service will listen on for proxy requests
+      targetPort: proxy # Matches 'name' in containerPort for the proxy
+    - name: http-api
+      protocol: TCP
+      port: 4456      # Port the service will listen on for API requests
+      targetPort: api  # Matches 'name' in containerPort for the API

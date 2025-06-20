@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hydra-migrate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hydra-migrate
+  template:
+    metadata:
+      labels:
+        app: hydra-migrate
+    spec:
+      containers:
+        - name: hydra-migrate
+          image: oryd/hydra:v2.3.0
+          command:
+            - "hydra"
+            - "migrate"
+            - "-c"
+            - "/etc/config/hydra/hydra.yml"
+            - "sql"
+            - "-e"
+            - "--yes"
+          env:
+            # DSN constructed using POSTGRES_PASSWORD from postgres-secrets
+            - name: DSN
+              value: "postgres://hydra:$(POSTGRES_PASSWORD)@postgres-service:5432/hydra?sslmode=disable"
+            # Other Hydra-specific env vars can go here if needed
+          envFrom:
+            # Source POSTGRES_PASSWORD from postgres-secrets to be available for DSN construction
+            - secretRef:
+                name: postgres-secrets
+            # If other secrets from hydra-secrets were needed directly as env vars, they could be sourced here too.
+            # e.g., - secretRef:
+            #         name: hydra-secrets
+          volumeMounts:
+            - name: hydra-config-volume
+              mountPath: /etc/config/hydra
+      restartPolicy: OnFailure
+      volumes:
+        - name: hydra-config-volume
+          configMap:
+            name: hydra-config # Name of the ConfigMap created earlier
+            items:
+              - key: hydra.yml
+                path: hydra.yml

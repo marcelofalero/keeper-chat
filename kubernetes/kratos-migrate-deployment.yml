@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kratos-migrate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kratos-migrate
+  template:
+    metadata:
+      labels:
+        app: kratos-migrate
+    spec:
+      containers:
+        - name: kratos-migrate
+          image: oryd/kratos:latest # Using 'latest' as specified
+          command:
+            - "kratos"
+            - "migrate"
+            - "sql"
+            # The -c flag for config is not strictly needed if DSN is from env,
+            # but Kratos might load other settings from it even for migration.
+            # Let's keep it consistent with the main deployment.
+            - "-c"
+            - "/etc/config/kratos/kratos.yml"
+            - "-e"
+            - "--yes"
+          env:
+            # Construct DSN using the 'kratos' user, password from 'postgres-secrets',
+            # and 'kratos' database on 'postgres-service'.
+            - name: DSN
+              value: "postgres://kratos:$(POSTGRES_PASSWORD)@postgres-service:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4"
+            # This envFrom makes POSTGRES_PASSWORD from postgres-secrets available for DSN construction.
+          envFrom:
+            - secretRef:
+                name: postgres-secrets # Source POSTGRES_PASSWORD from here
+          volumeMounts:
+            - name: kratos-config-volume
+              mountPath: /etc/config/kratos
+      restartPolicy: OnFailure
+      volumes:
+        - name: kratos-config-volume
+          configMap:
+            name: kratos-config # Name of the ConfigMap for kratos.yml
+            items:
+              - key: kratos.yml
+                path: kratos.yml
+              # Also mount identity.schema.json if kratos.yml refers to it during migration, though unlikely.
+              # Better to be consistent with the main Kratos deployment.
+              - key: identity.schema.json
+                path: identity.schema.json

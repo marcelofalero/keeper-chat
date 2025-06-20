@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-service
+spec:
+  type: ClusterIP # Can be changed to NodePort or LoadBalancer (e.g. to expose on host 8081)
+  selector:
+    app: ui
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80   # Port the service will listen on
+      targetPort: http # Matches 'name' in containerPort of the deployment (Nginx port 80)

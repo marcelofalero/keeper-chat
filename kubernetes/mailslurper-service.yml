@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailslurper-service # This is the name Kratos config should point to
+spec:
+  type: ClusterIP # Can be changed to NodePort for UI access if needed
+  selector:
+    app: mailslurper
+  ports:
+    - name: http-ui
+      protocol: TCP
+      port: 4436       # Service port for Web UI
+      targetPort: http-ui # Matches 'name' in containerPort for Web UI (4436)
+    - name: smtp
+      protocol: TCP
+      port: 1025       # Service port for SMTP
+      targetPort: smtp  # Matches 'name' in containerPort for SMTP (1025)
+    - name: admin-api
+      protocol: TCP
+      port: 4001       # Service port for Admin API (as requested)
+      targetPort: admin-api # Matches 'name' in containerPort for Admin API (4437)
