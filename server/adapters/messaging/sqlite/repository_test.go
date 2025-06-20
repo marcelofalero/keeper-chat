@@ -226,55 +226,54 @@ func TestGetMessages(t *testing.T) {
 			t.Errorf("Message %d: Expected timestamp %v, got %v", i, expected.TS, actual.Timestamp)
 		}
 		if actual.ID == 0 { // Check if ID was populated (it should be)
-             t.Errorf("Message %d: Expected ID to be populated, got 0", i)
-        }
+			t.Errorf("Message %d: Expected ID to be populated, got 0", i)
+		}
 	}
 }
 
-
 func TestGetMessages_Sorted(t *testing.T) {
-    db := setupTestDB(t)
-    defer db.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-    repo := sqlite.NewSQLiteRepository(db)
-    if err := repo.InitSchema(); err != nil {
-        t.Fatalf("InitSchema() failed: %v", err)
-    }
+	repo := sqlite.NewSQLiteRepository(db)
+	if err := repo.InitSchema(); err != nil {
+		t.Fatalf("InitSchema() failed: %v", err)
+	}
 
-    // Timestamps deliberately out of order for saving
-    now := time.Now().Truncate(time.Second)
-    messagesToSave := []models.Message{
-        {User: "UserC", Text: "Msg C - Middle", Timestamp: now.Add(-10 * time.Minute)},
-        {User: "UserA", Text: "Msg A - Last", Timestamp: now},
-        {User: "UserB", Text: "Msg B - First", Timestamp: now.Add(-20 * time.Minute)},
-    }
+	// Timestamps deliberately out of order for saving
+	now := time.Now().Truncate(time.Second)
+	messagesToSave := []models.Message{
+		{User: "UserC", Text: "Msg C - Middle", Timestamp: now.Add(-10 * time.Minute)},
+		{User: "UserA", Text: "Msg A - Last", Timestamp: now},
+		{User: "UserB", Text: "Msg B - First", Timestamp: now.Add(-20 * time.Minute)},
+	}
 
-    for _, msg := range messagesToSave {
-        if err := repo.SaveMessage(msg); err != nil {
-            t.Fatalf("SaveMessage() failed: %v for message: %+v", err, msg)
-        }
-    }
+	for _, msg := range messagesToSave {
+		if err := repo.SaveMessage(msg); err != nil {
+			t.Fatalf("SaveMessage() failed: %v for message: %+v", err, msg)
+		}
+	}
 
-    retrievedMessages, err := repo.GetMessages()
-    if err != nil {
-        t.Fatalf("GetMessages() failed: %v", err)
-    }
+	retrievedMessages, err := repo.GetMessages()
+	if err != nil {
+		t.Fatalf("GetMessages() failed: %v", err)
+	}
 
-    if len(retrievedMessages) != len(messagesToSave) {
-        t.Fatalf("Expected %d messages, got %d", len(messagesToSave), len(retrievedMessages))
-    }
+	if len(retrievedMessages) != len(messagesToSave) {
+		t.Fatalf("Expected %d messages, got %d", len(messagesToSave), len(retrievedMessages))
+	}
 
-    // Verify that messages are sorted by timestamp (ascending)
-    isSorted := sort.SliceIsSorted(retrievedMessages, func(i, j int) bool {
-        return retrievedMessages[i].Timestamp.Before(retrievedMessages[j].Timestamp)
-    })
+	// Verify that messages are sorted by timestamp (ascending)
+	isSorted := sort.SliceIsSorted(retrievedMessages, func(i, j int) bool {
+		return retrievedMessages[i].Timestamp.Before(retrievedMessages[j].Timestamp)
+	})
 
-    if !isSorted {
-        t.Error("Retrieved messages are not sorted by timestamp ASC as expected.")
-        for i, msg := range retrievedMessages {
-            t.Logf("Msg %d: User: %s, Text: %s, TS: %s, ID: %d", i, msg.User, msg.Text, msg.Timestamp, msg.ID)
-        }
-    }
+	if !isSorted {
+		t.Error("Retrieved messages are not sorted by timestamp ASC as expected.")
+		for i, msg := range retrievedMessages {
+			t.Logf("Msg %d: User: %s, Text: %s, TS: %s, ID: %d", i, msg.User, msg.Text, msg.Timestamp, msg.ID)
+		}
+	}
 
 	// Additionally check the first and last element content if sorted
 	if isSorted {
@@ -286,7 +285,6 @@ func TestGetMessages_Sorted(t *testing.T) {
 		}
 	}
 }
-
 
 func TestGetMessages_Empty(t *testing.T) {
 	db := setupTestDB(t)
@@ -317,4 +315,3 @@ func TestGetMessages_Empty(t *testing.T) {
 // - Error handling in DB operations (e.g., simulate DB connection failure - harder with in-memory)
 // - Concurrency tests if the repository is meant to be used concurrently (though SQLite has limitations)
 // - Test timestamp parsing in GetMessages with various formats if the DB could store them differently.
-```
