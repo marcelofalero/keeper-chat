@@ -35,4 +35,3 @@ spec:
           # unless the Nginx config within the image is parameterized.
           # The Flutter UI (test-ui) Dockerfile likely builds and serves static files via Nginx.
           # The default port for Nginx is 80.
-          pass;
